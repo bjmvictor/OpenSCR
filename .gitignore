@@ -1,0 +1,84 @@
+# =========================
+# Python
+# =========================
+
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Python tooling
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# =========================
+# PyInstaller
+# =========================
+
+build/
+dist/
+*.spec
+
+# =========================
+# OpenSCR generated files
+# =========================
+
+release/
+
+resources/OpenSCRRuntime.exe
+resources/OpenSCRRuntime.scr
+
+preview_config.json
+
+# Screensavers generated during development
+*.scr
+*.data/
+
+# Exception:
+# If some .scr is ever intentionally versioned,
+# remove or override the rule above.
+
+# =========================
+# IDEs
+# =========================
+
+.vscode/
+.idea/
+
+# =========================
+# Windows
+# =========================
+
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# =========================
+# macOS
+# =========================
+
+.DS_Store
+
+# =========================
+# Logs
+# =========================
+
+*.log
+
+# =========================
+# Temporary files
+# =========================
+
+*.tmp
+*.temp
+*.bak
+~$*

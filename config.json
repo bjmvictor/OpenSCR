@@ -1,0 +1,25 @@
+{
+    "images": [
+        "C:\\Users\\benjamin.vieira\\Pictures\\1.jpg",
+        "C:\\Users\\benjamin.vieira\\Pictures\\2.jpg",
+        "C:\\Users\\benjamin.vieira\\Pictures\\3.jpg"
+    ],
+
+    "display_seconds": 5,
+    "transition_seconds": 1.5,
+    "transition": "random",
+    "image_fit": "cover",
+
+    "text": "{weekday}, {date}\n{time_seconds}",
+
+    "text_enabled": true,
+    "text_position": "bottom_right",
+    "text_size": 32,
+    "text_color": "#FFFFFF",
+    "text_margin": 50,
+
+    "background_color": "#000000",
+
+    "exit_on_mouse": true,
+    "mouse_threshold": 15
+}
