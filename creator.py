@@ -1,3 +1,4 @@
+import ctypes
 import json
 import os
 import subprocess
@@ -40,6 +41,30 @@ from runtime.variables import (
     AVAILABLE_VARIABLES,
 )
 
+# -----------------------------------------------------
+# ASSETS / APPID
+# -----------------------------------------------------
+
+def configure_windows_app_id():
+    if sys.platform != "win32":
+        return
+
+    app_id = "bjmvictor.OpenSCR"
+
+    try:
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+            app_id
+        )
+    except Exception:
+        pass
+
+def resource_path(relative_path: str) -> Path:
+    if getattr(sys, "frozen", False):
+        base_path = Path(sys._MEIPASS)
+    else:
+        base_path = Path(__file__).resolve().parent
+
+    return base_path / relative_path
 
 class OpenSCRCreator(
     QMainWindow
@@ -60,17 +85,13 @@ class OpenSCRCreator(
             "OpenSCR"
         )
 
-        icon_path = (
-            Path(__file__).resolve().parent
-            / "assets"
-            / "OpenSCR.ico"
+        icon_path = resource_path(
+            "assets/OpenSCR.ico"
         )
 
         if icon_path.exists():
             self.setWindowIcon(
-                QIcon(
-                    str(icon_path)
-                )
+                QIcon(str(icon_path))
             )
 
         self.resize(
@@ -1033,9 +1054,32 @@ class OpenSCRCreator(
         self.build_thread = None
 
 def main():
+    configure_windows_app_id()
+
     app = QApplication(
         sys.argv
     )
+
+    app.setApplicationName(
+        "OpenSCR"
+    )
+
+    app.setApplicationDisplayName(
+        "OpenSCR"
+    )
+
+    app.setOrganizationName(
+        "bjmvictor"
+    )
+
+    icon_path = resource_path(
+        "assets/OpenSCR.ico"
+    )
+
+    if icon_path.exists():
+        app.setWindowIcon(
+            QIcon(str(icon_path))
+        )
 
     window = OpenSCRCreator()
 
