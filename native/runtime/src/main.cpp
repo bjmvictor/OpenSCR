@@ -1,5 +1,6 @@
 #include <windows.h>
 #include <shellapi.h>
+#include <numeric>
 
 #include <d2d1.h>
 #include <dwrite.h>
@@ -43,7 +44,7 @@ constexpr std::uint32_t CONFIG_MAGIC =
     0x5243534F;
 
 constexpr std::uint32_t CONFIG_VERSION =
-    1;
+    2;
 
 
 // ============================================================
@@ -72,10 +73,15 @@ struct RuntimeConfig
 
     std::uint32_t fitMode =
         0;
+
+    std::uint32_t orderMode =
+        0;
 };
 
 static_assert(
-    sizeof(RuntimeConfig) == 28
+    sizeof(RuntimeConfig)
+    ==
+    32
 );
 
 // ============================================================
@@ -88,31 +94,32 @@ struct TextConfig
 
     std::uint32_t fontSize = 32;
 
-    // ARGB
-    //
-    // Exemplo:
-    // 0xFFFFFFFF = branco
-    // 0xFF000000 = preto
     std::uint32_t color =
         0xFFFFFFFF;
 
-    // 0 = top left
-    // 1 = top center
-    // 2 = top right
-    // 3 = center
-    // 4 = bottom left
-    // 5 = bottom center
-    // 6 = bottom right
     std::uint32_t position = 6;
 
     std::uint32_t margin = 50;
+
+
+    std::uint32_t shadowEnabled = 1;
+
+    std::uint32_t shadowColor =
+        0xFF000000;
+
+    std::int32_t shadowOffsetX = 2;
+
+    std::int32_t shadowOffsetY = 2;
+
+    std::uint32_t shadowOpacity = 180;
 };
 
 
 static_assert(
-    sizeof(TextConfig) == 20
+    sizeof(TextConfig)
+    ==
+    40
 );
-
 
 // ============================================================
 // Globals
@@ -154,9 +161,11 @@ std::vector<RECT>
     g_monitors;
 
 
-std::size_t g_currentImage = 0;
-std::size_t g_nextImage = 0;
+std::vector<std::size_t>
+    g_imageOrder;
 
+std::size_t
+    g_sequencePosition = 0;
 
 bool g_transitioning = false;
 
@@ -211,8 +220,60 @@ void Render(
     HWND
 );
 
-
 void ReleaseDeviceResources();
+
+void BuildImageOrder()
+{
+    g_imageOrder.resize(
+        g_bitmaps.size()
+    );
+
+
+    std::iota(
+        g_imageOrder.begin(),
+        g_imageOrder.end(),
+        0
+    );
+
+
+    // Reverse
+    if (
+        g_config.orderMode
+        ==
+        1
+    )
+    {
+        std::reverse(
+            g_imageOrder.begin(),
+            g_imageOrder.end()
+        );
+    }
+
+
+    // Random
+    else if (
+        g_config.orderMode
+        ==
+        2
+    )
+    {
+        static std::mt19937 generator(
+            static_cast<std::uint32_t>(
+                GetTickCount64()
+            )
+        );
+
+
+        std::shuffle(
+            g_imageOrder.begin(),
+            g_imageOrder.end(),
+            generator
+        );
+    }
+
+
+    g_sequencePosition = 0;
+}
 
 
 // ============================================================
@@ -416,6 +477,13 @@ void LoadRuntimeConfig()
             60000u
         );
 
+    g_config.orderMode =
+    std::clamp(
+        g_config.orderMode,
+        0u,
+        2u
+    );
+
     g_config.transitionMode =
     std::clamp(
         g_config.transitionMode,
@@ -479,6 +547,37 @@ void LoadTextResources()
                 g_textConfig.margin,
                 0u,
                 500u
+            );
+
+        g_textConfig.shadowEnabled =
+            g_textConfig.shadowEnabled
+            ?
+            1u
+            :
+            0u;
+
+
+        g_textConfig.shadowOpacity =
+            std::clamp(
+                g_textConfig.shadowOpacity,
+                0u,
+                255u
+            );
+
+
+        g_textConfig.shadowOffsetX =
+            std::clamp(
+                g_textConfig.shadowOffsetX,
+                -100,
+                100
+            );
+
+
+        g_textConfig.shadowOffsetY =
+            std::clamp(
+                g_textConfig.shadowOffsetY,
+                -100,
+                100
             );
     }
 
@@ -985,21 +1084,31 @@ HRESULT CreateTextResources()
     // Shadow
     // --------------------------------------------------------
 
-    if (!g_shadowBrush)
+    if (
+        g_textConfig.shadowEnabled
+        &&
+        !g_shadowBrush
+    )
     {
+        D2D1_COLOR_F shadowColor =
+            ColorFromArgb(
+                g_textConfig.shadowColor
+            );
+
+
+        shadowColor.a *=
+            static_cast<float>(
+                g_textConfig.shadowOpacity
+            )
+            /
+            255.0f;
+
+
         hr =
             g_renderTarget
             ->CreateSolidColorBrush(
-
-                D2D1::ColorF(
-                    0.0f,
-                    0.0f,
-                    0.0f,
-                    0.75f
-                ),
-
-                g_shadowBrush
-                    .GetAddressOf()
+                shadowColor,
+                g_shadowBrush.GetAddressOf()
             );
 
 
@@ -1447,7 +1556,11 @@ void DrawTextInMonitor(
         ||
         !g_textBrush
         ||
-        !g_shadowBrush
+        (
+            g_textConfig.shadowEnabled
+            &&
+            !g_shadowBrush
+        )
     )
     {
         return;
@@ -1508,34 +1621,51 @@ void DrawTextInMonitor(
     // Shadow
     // --------------------------------------------------------
 
-    const D2D1_RECT_F shadowRect =
-        D2D1::RectF(
+    if (
+        g_textConfig.shadowEnabled
+        &&
+        g_shadowBrush
+    )
+    {
+        const float offsetX =
+            static_cast<float>(
+                g_textConfig.shadowOffsetX
+            );
 
-            textRect.left + 2.0f,
-            textRect.top + 2.0f,
 
-            textRect.right + 2.0f,
-            textRect.bottom + 2.0f
-        );
+        const float offsetY =
+            static_cast<float>(
+                g_textConfig.shadowOffsetY
+            );
 
 
-    g_renderTarget
-        ->DrawTextW(
+        const D2D1_RECT_F shadowRect =
+            D2D1::RectF(
+                textRect.left + offsetX,
+                textRect.top + offsetY,
 
-            text.c_str(),
+                textRect.right + offsetX,
+                textRect.bottom + offsetY
+            );
 
-            static_cast<UINT32>(
-                text.size()
-            ),
 
-            g_textFormat.Get(),
+        g_renderTarget
+            ->DrawTextW(
+                text.c_str(),
 
-            shadowRect,
+                static_cast<UINT32>(
+                    text.size()
+                ),
 
-            g_shadowBrush.Get(),
+                g_textFormat.Get(),
 
-            D2D1_DRAW_TEXT_OPTIONS_CLIP
-        );
+                shadowRect,
+
+                g_shadowBrush.Get(),
+
+                D2D1_DRAW_TEXT_OPTIONS_CLIP
+            );
+    }
 
 
     // --------------------------------------------------------
@@ -1609,26 +1739,49 @@ void LoadAllBitmaps()
     }
 
 
-    g_currentImage = 0;
-
-    g_nextImage =
-        (
-            g_bitmaps.size()
-            >
-            1
-        )
-        ?
-        1
-        :
-        0;
-
+    BuildImageOrder();
 
     g_transitioning =
         false;
 
+    g_slideStartedAt =
+        GetTickCount64();
+
+    g_transitioning =
+        false;
 
     g_slideStartedAt =
         GetTickCount64();
+}
+
+std::size_t ImageIndexForMonitor(
+    std::size_t monitorIndex,
+    std::size_t offset
+)
+{
+    if (
+        g_imageOrder.empty()
+    )
+    {
+        return 0;
+    }
+
+
+    const std::size_t position =
+        (
+            g_sequencePosition
+            +
+            monitorIndex
+            +
+            offset
+        )
+        %
+        g_imageOrder.size();
+
+
+    return g_imageOrder[
+        position
+    ];
 }
 
 
@@ -2008,18 +2161,33 @@ void DrawGradientTransition(
 
 void DrawTransitionInMonitor(
     const RECT& monitor,
-    float progress
+    float progress,
+    std::size_t monitorIndex
 )
 {
+    const std::size_t currentIndex =
+        ImageIndexForMonitor(
+            monitorIndex,
+            0
+        );
+
+
+    const std::size_t nextIndex =
+        ImageIndexForMonitor(
+            monitorIndex,
+            1
+        );
+
+
     ID2D1Bitmap* current =
         g_bitmaps[
-            g_currentImage
+            currentIndex
         ].Get();
 
 
     ID2D1Bitmap* next =
         g_bitmaps[
-            g_nextImage
+            nextIndex
         ].Get();
 
 
@@ -2258,16 +2426,29 @@ void Render(
 
 
         for (
-            const RECT& monitor
-            :
-            g_monitors
+            std::size_t monitorIndex = 0;
+            monitorIndex < g_monitors.size();
+            ++monitorIndex
         )
         {
+            const RECT& monitor =
+                g_monitors[
+                    monitorIndex
+                ];
+
+
             if (!g_transitioning)
             {
+                const std::size_t imageIndex =
+                    ImageIndexForMonitor(
+                        monitorIndex,
+                        0
+                    );
+
+
                 DrawBitmapInMonitor(
                     g_bitmaps[
-                        g_currentImage
+                        imageIndex
                     ].Get(),
 
                     monitor,
@@ -2275,11 +2456,13 @@ void Render(
                     1.0f
                 );
             }
+
             else
             {
                 DrawTransitionInMonitor(
                     monitor,
-                    progress
+                    progress,
+                    monitorIndex
                 );
             }
         }
@@ -2367,16 +2550,6 @@ void UpdateSlideshow(
             g_config.displayMs
         )
         {
-            g_nextImage =
-                (
-                    g_currentImage
-                    +
-                    1
-                )
-                %
-                g_bitmaps.size();
-
-
             g_activeTransitionMode =
                 ResolveTransitionMode();
 
@@ -2413,8 +2586,14 @@ void UpdateSlideshow(
         g_config.transitionMs
     )
     {
-        g_currentImage =
-            g_nextImage;
+        g_sequencePosition =
+        (
+            g_sequencePosition
+            +
+            1
+        )
+        %
+        g_imageOrder.size();
 
 
         g_transitioning =

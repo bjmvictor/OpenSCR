@@ -62,7 +62,7 @@ RESOURCE_IMAGE_START = 1000
 # "OSCR" em little endian
 CONFIG_MAGIC = 0x5243534F
 
-CONFIG_VERSION = 1
+CONFIG_VERSION = 2
 
 
 # ============================================================
@@ -156,28 +156,29 @@ def build_text_config(
     color,
     position,
     margin,
+
+    shadow_enabled=True,
+    shadow_color="#000000",
+    shadow_offset_x=2,
+    shadow_offset_y=2,
+    shadow_opacity=180,
 ):
     positions = {
         "top_left": 0,
         "top_center": 1,
         "top_right": 2,
-
         "center": 3,
-
         "bottom_left": 4,
         "bottom_center": 5,
         "bottom_right": 6,
     }
 
-
     return struct.pack(
-        "<5I",
+        "<7I2iI",
 
         1 if enabled else 0,
 
-        int(
-            font_size
-        ),
+        int(font_size),
 
         parse_color(
             color
@@ -187,10 +188,29 @@ def build_text_config(
             position
         ],
 
-        int(
-            margin
+        int(margin),
+
+        1 if shadow_enabled else 0,
+
+        parse_color(
+            shadow_color
         ),
 
+        int(
+            shadow_offset_x
+        ),
+
+        int(
+            shadow_offset_y
+        ),
+
+        max(
+            0,
+            min(
+                255,
+                int(shadow_opacity),
+            ),
+        ),
     )
     
 
@@ -316,6 +336,7 @@ def build_config(
     transition_seconds,
     transition,
     fit,
+    image_order,
 ):
     transition_modes = {
         "fade": 0,
@@ -331,11 +352,21 @@ def build_config(
         "contain": 1,
     }
 
+    order_modes = {
+        "forward": 0,
+        "reverse": 1,
+        "random": 2,
+    }
+
     transition_mode = (
         transition_modes[
             transition
         ]
     )
+
+    order_mode = order_modes[
+        image_order
+    ]
 
     fit_mode = (
         fit_modes[
@@ -356,7 +387,7 @@ def build_config(
     )
 
     return struct.pack(
-        "<7I",
+        "<8I",
 
         CONFIG_MAGIC,
         CONFIG_VERSION,
@@ -368,8 +399,8 @@ def build_config(
 
         transition_mode,
         fit_mode,
+        order_mode,
     )
-
 
 # ============================================================
 # Build
@@ -385,6 +416,8 @@ def build_native_screensaver(
     transition="fade",
     fit="cover",
 
+    image_order="forward",
+
     text="",
     text_enabled=True,
 
@@ -393,6 +426,12 @@ def build_native_screensaver(
 
     text_position="bottom_right",
     text_margin=50,
+
+    text_shadow_enabled=True,
+    text_shadow_color="#000000",
+    text_shadow_offset_x=2,
+    text_shadow_offset_y=2,
+    text_shadow_opacity=180,
 ):
     destination = Path(
         destination
@@ -461,6 +500,7 @@ def build_native_screensaver(
 
         transition=transition,
         fit=fit,
+        image_order=image_order,
     )
 
     text_config_data = (
@@ -478,6 +518,12 @@ def build_native_screensaver(
             position=text_position,
 
             margin=text_margin,
+
+            shadow_enabled=text_shadow_enabled,
+            shadow_color=text_shadow_color,
+            shadow_offset_x=text_shadow_offset_x,
+            shadow_offset_y=text_shadow_offset_y,
+            shadow_opacity=text_shadow_opacity,
         )
     )
 

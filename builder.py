@@ -28,6 +28,11 @@ def build_screensaver(
     else:
         margin = int(margins)
 
+    shadow = config.get(
+        "text_shadow",
+        {},
+    )
+
     return build_native_screensaver(
         image_paths=images,
 
@@ -87,4 +92,42 @@ def build_screensaver(
         ),
 
         text_margin=margin,
+
+        text_shadow_enabled=bool(
+            shadow.get(
+                "enabled",
+                True,
+            )
+        ),
+
+        text_shadow_color=shadow.get(
+            "color",
+            "#000000",
+        ),
+
+        text_shadow_offset_x=int(
+            shadow.get(
+                "offset_x",
+                2,
+            )
+        ),
+
+        text_shadow_offset_y=int(
+            shadow.get(
+                "offset_y",
+                2,
+            )
+        ),
+
+        text_shadow_opacity=int(
+            shadow.get(
+                "opacity",
+                180,
+            )
+        ),
+
+        image_order=config.get(
+            "image_order",
+            "forward",
+        ),
     )

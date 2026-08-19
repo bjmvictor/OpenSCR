@@ -14,11 +14,13 @@ from pathlib import Path
 from PySide6.QtCore import (
     Qt,
     QProcess,
+    QSize
 )
 from PySide6.QtGui import (
     QAction,
     QColor,
     QIcon,
+    QPixmap
 )
 from PySide6.QtWidgets import (
     QApplication,
@@ -41,6 +43,8 @@ from PySide6.QtWidgets import (
     QTextEdit,
     QVBoxLayout,
     QWidget,
+    QAbstractItemView,
+    QListView
 )
 
 from openscr_variables import (
@@ -145,12 +149,41 @@ class OpenSCRCreator(
             "color: #777;"
         )
 
-        main_layout.addWidget(
-            title
+        header = QHBoxLayout()
+
+        brand = QVBoxLayout()
+        brand.addWidget(title)
+        brand.addWidget(subtitle)
+
+        header.addLayout(brand)
+        header.addStretch()
+
+        self.preview_button = QPushButton(
+            "▶ Visualizar"
         )
 
-        main_layout.addWidget(
-            subtitle
+        self.build_button = QPushButton(
+            "Gerar .SCR"
+        )
+
+        self.preview_button.clicked.connect(
+            self.preview
+        )
+
+        self.build_button.clicked.connect(
+            self.build_scr
+        )
+
+        header.addWidget(
+            self.preview_button
+        )
+
+        header.addWidget(
+            self.build_button
+        )
+
+        main_layout.addLayout(
+            header
         )
 
         splitter = QSplitter(
@@ -243,7 +276,48 @@ class OpenSCRCreator(
             self.image_list
         )
 
+        self.image_list.setDragEnabled(
+            True
+        )
+
+        self.image_list.setAcceptDrops(
+            True
+        )
+
+        self.image_list.setDropIndicatorShown(
+            True
+        )
+
+        self.image_list.setDragDropMode(
+            QAbstractItemView.DragDropMode.InternalMove
+        )
+
+        self.image_list.setDefaultDropAction(
+            Qt.DropAction.MoveAction
+        )
+
+
+        self.image_list.model().rowsMoved.connect(
+            self.sync_images_from_widget
+        )
+
         image_buttons = QHBoxLayout()
+
+        self.image_view_mode = QComboBox()
+
+        self.image_view_mode.addItem(
+            "Lista",
+            "list",
+        )
+
+        self.image_view_mode.addItem(
+            "Grade",
+            "grid",
+        )
+
+        self.image_view_mode.currentIndexChanged.connect(
+            self.update_image_view_mode
+        )
 
         add_image = QPushButton(
             "Adicionar"
@@ -259,6 +333,12 @@ class OpenSCRCreator(
 
         remove_image.clicked.connect(
             self.remove_image
+        )
+
+        image_buttons.addStretch()
+
+        image_buttons.addWidget(
+            self.image_view_mode
         )
 
         image_buttons.addWidget(
@@ -284,6 +364,28 @@ class OpenSCRCreator(
 
         animation_form = QFormLayout(
             animation_group
+        )
+
+        self.image_order = QComboBox()
+
+        self.image_order.addItem(
+            "Ordenado",
+            "forward",
+        )
+
+        self.image_order.addItem(
+            "Reverso",
+            "reverse",
+        )
+
+        self.image_order.addItem(
+            "Aleatório",
+            "random",
+        )
+
+        animation_form.addRow(
+            "Ordem das imagens:",
+            self.image_order,
         )
 
         self.display_time = (
@@ -583,19 +685,82 @@ class OpenSCRCreator(
             margins_layout.addWidget(QLabel(label))
             margins_layout.addWidget(margin)
 
-        self.shadow_enabled = QCheckBox("Sombra ativa")
-        self.shadow_enabled.setChecked(True)
-        self.shadow_enabled.toggled.connect(self.update_shadow_controls)
-        self.shadow_color_button = QPushButton("#000000")
-        self.shadow_color_button.clicked.connect(self.select_shadow_color)
+        self.shadow_enabled = QCheckBox(
+            "Sombra ativa"
+        )
+
+        self.shadow_enabled.setChecked(
+            True
+        )
+
+
+        self.shadow_color_button = QPushButton(
+            "#000000"
+        )
+
+        self.shadow_color_button.clicked.connect(
+            self.select_shadow_color
+        )
+
+
         self.shadow_x = QSpinBox()
         self.shadow_y = QSpinBox()
-        for offset in (self.shadow_x, self.shadow_y):
-            offset.setRange(-100, 100)
-            offset.setValue(2)
+
+        for offset in (
+            self.shadow_x,
+            self.shadow_y,
+        ):
+            offset.setRange(
+                -100,
+                100,
+            )
+
+            offset.setValue(
+                2
+            )
+
+
         self.shadow_opacity = QSpinBox()
-        self.shadow_opacity.setRange(0, 255)
-        self.shadow_opacity.setValue(180)
+
+        self.shadow_opacity.setRange(
+            0,
+            255,
+        )
+
+        self.shadow_opacity.setValue(
+            180
+        )
+
+        self.shadow_options = QWidget()
+
+        shadow_form = QFormLayout(
+            self.shadow_options
+        )
+
+        shadow_form.setContentsMargins(
+            0,
+            0,
+            0,
+            0,
+        )
+
+
+        shadow_form.addRow(
+            "Cor da sombra:",
+            self.shadow_color_button,
+        )
+
+
+        shadow_form.addRow(
+            "Deslocamento X/Y:",
+            self.create_shadow_offset_layout(),
+        )
+
+
+        shadow_form.addRow(
+            "Opacidade:",
+            self.shadow_opacity,
+        )
 
         form.addRow(
             "Posição:",
@@ -620,6 +785,17 @@ class OpenSCRCreator(
         form.addRow(
             "Sombra:",
             self.shadow_enabled,
+        )
+        form.addRow(
+            self.shadow_options,
+        )
+
+        self.shadow_enabled.toggled.connect(
+            self.shadow_options.setVisible
+        )
+
+        self.shadow_options.setVisible(
+            self.shadow_enabled.isChecked()
         )
 
         form.addRow(
@@ -703,14 +879,141 @@ class OpenSCRCreator(
                 if checked else Qt.CheckState.Unchecked
             )
 
-    def update_shadow_controls(self, enabled):
-        for control in (
-            self.shadow_color_button,
-            self.shadow_x,
-            self.shadow_y,
-            self.shadow_opacity,
-        ):
-            control.setEnabled(enabled)
+    def refresh_image_list(self):
+        self.image_list.clear()
+
+        for path in self.images:
+            self.image_list.addItem(
+                self.create_image_item(
+                    path
+                )
+            )
+
+    def sync_images_from_widget(
+        self,
+        *args,
+    ):
+        self.images = [
+            self.image_list.item(index).data(
+                Qt.ItemDataRole.UserRole
+            )
+
+            for index in range(
+                self.image_list.count()
+            )
+        ]
+
+    def update_image_view_mode(
+        self,
+        *args,
+    ):
+        mode = (
+            self.image_view_mode
+            .currentData()
+        )
+
+
+        if mode == "grid":
+            self.image_list.setViewMode(
+                QListView.ViewMode.IconMode
+            )
+
+            self.image_list.setIconSize(
+                QSize(
+                    128,
+                    80,
+                )
+            )
+
+            self.image_list.setGridSize(
+                QSize(
+                    165,
+                    120,
+                )
+            )
+
+            self.image_list.setResizeMode(
+                QListView.ResizeMode.Adjust
+            )
+
+            self.image_list.setMovement(
+                QListView.Movement.Snap
+            )
+
+            self.image_list.setWordWrap(
+                True
+            )
+
+        else:
+            self.image_list.setViewMode(
+                QListView.ViewMode.ListMode
+            )
+
+            self.image_list.setIconSize(
+                QSize(
+                    64,
+                    44,
+                )
+            )
+
+            self.image_list.setGridSize(
+                QSize()
+            )
+
+            self.image_list.setMovement(
+                QListView.Movement.Snap
+            )
+
+            self.image_list.setWordWrap(
+                False
+            )
+
+    def create_image_item(
+        self,
+        path,
+    ):
+        item = QListWidgetItem(
+            Path(path).name
+        )
+
+        item.setData(
+            Qt.ItemDataRole.UserRole,
+            path,
+        )
+
+        item.setToolTip(
+            path
+        )
+
+
+        pixmap = QPixmap(
+            path
+        )
+
+        if not pixmap.isNull():
+            thumbnail = pixmap.scaled(
+                128,
+                80,
+
+                Qt.AspectRatioMode.KeepAspectRatio,
+
+                Qt.TransformationMode.SmoothTransformation,
+            )
+
+            item.setIcon(
+                QIcon(thumbnail)
+            )
+
+
+        return item
+
+    def update_shadow_controls(
+        self,
+        enabled,
+    ):
+        self.shadow_options.setVisible(
+            enabled
+        )
 
     # -----------------------------------------------------
     # IMAGES
@@ -734,13 +1037,13 @@ class OpenSCRCreator(
                 )
 
                 self.image_list.addItem(
-                    file
+                    self.create_image_item(
+                        file
+                    )
                 )
 
     def remove_image(self):
-        row = (
-            self.image_list.currentRow()
-        )
+        row = self.image_list.currentRow()
 
         if row < 0:
             return
@@ -749,7 +1052,7 @@ class OpenSCRCreator(
             row
         )
 
-        del self.images[row]
+        self.sync_images_from_widget()
 
     # -----------------------------------------------------
     # TEXT
@@ -875,6 +1178,9 @@ class OpenSCRCreator(
                 "opacity": self.shadow_opacity.value(),
             },
 
+            "image_order":
+                self.image_order.currentData(),
+
             "background_color":
                 self.background_color,
 
@@ -933,7 +1239,7 @@ class OpenSCRCreator(
                 for image in config.get("images", [])
             ]
             self.image_list.clear()
-            self.image_list.addItems(self.images)
+            self.refresh_image_list()
             self.apply_config(config)
         except (OSError, json.JSONDecodeError, TypeError, ValueError) as exc:
             QMessageBox.critical(
@@ -951,6 +1257,13 @@ class OpenSCRCreator(
         self.text_enabled.setChecked(config.get("text_enabled", True))
         self.set_combo_data(self.text_position, config.get("text_position", "bottom_right"))
         self.text_size.setValue(config.get("text_size", 32))
+        self.set_combo_data(
+            self.image_order,
+            config.get(
+                "image_order",
+                "forward",
+            ),
+        )
 
         self.text_color = config.get("text_color", "#FFFFFF")
         self.color_button.setText(self.text_color.upper())
