@@ -137,6 +137,7 @@ MeuProtetor.data/
 O arquivo `.scr` e sua pasta `.data` devem permanecer juntos.
 
 A exportação completamente autocontida em um único arquivo está prevista no roadmap.
+> Não sendo implementado ainda por problemas de falsos positivos em antivírus no Windows
 
 <p align="right">(<a href="#readme-top">voltar ao topo</a>)</p>
 
@@ -168,7 +169,7 @@ Para executar o projeto em ambiente de desenvolvimento:
 
 - Python 3
 - Git
-- Windows 10 ou Windows 11
+- Windows >= 10
 
 ### Instalação
 
