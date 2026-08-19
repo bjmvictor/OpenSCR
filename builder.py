@@ -1,5 +1,6 @@
 import json
 import shutil
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -44,11 +45,26 @@ def build_screensaver(
     )
 
     if not runtime_template.exists():
-        raise FileNotFoundError(
-            "OpenSCRRuntime.scr não encontrado.\n\n"
-            "Execute primeiro:\n"
-            "python build_runtime.py"
+        if getattr(sys, "frozen", False):
+            raise FileNotFoundError(
+                "OpenSCRRuntime.scr não encontrado no aplicativo instalado."
+            )
+
+        build_runtime_script = ROOT / "build_runtime.py"
+        if not build_runtime_script.exists():
+            raise FileNotFoundError(
+                "OpenSCRRuntime.scr não encontrado e build_runtime.py também não existe."
+            )
+
+        result = subprocess.run(
+            [sys.executable, str(build_runtime_script)],
+            cwd=str(ROOT),
+            check=False,
         )
+        if result.returncode != 0 or not runtime_template.exists():
+            raise RuntimeError(
+                "Não foi possível gerar automaticamente o runtime do OpenSCR."
+            )
 
     data_dir = destination.with_name(
         f"{destination.stem}.data"

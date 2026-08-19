@@ -215,17 +215,28 @@ class ScreenSaverWindow(QWidget):
 
         self.next_pixmap = self.images[self.current_index]
 
-        configured_transition = self.config.get(
-            "transition",
-            "fade",
-        )
+        configured_transition = self.config.get("transition", "fade")
+        selected_transitions = self.config.get("transition_effects", TRANSITIONS)
+        selected_transitions = [
+            transition for transition in selected_transitions
+            if transition in TRANSITIONS
+        ]
 
-        if configured_transition == "random":
-            self.transition_name = random.choice(
-                TRANSITIONS
+        if self.config.get("transition_random", False) or configured_transition == "random":
+            self.transition_name = (
+                random.choice(selected_transitions)
+                if selected_transitions
+                else None
             )
         else:
             self.transition_name = configured_transition
+
+        if self.transition_name is None:
+            self.current_pixmap = self.next_pixmap
+            self.next_pixmap = None
+            self.setProgress(0)
+            self.restart_slide_timer()
+            return
 
         self.setProgress(0)
 
@@ -724,16 +735,15 @@ class ScreenSaverWindow(QWidget):
 
         painter.setPen(color)
 
-        margin = self.config.get(
-            "text_margin",
-            50,
-        )
+        margins = self.config.get("text_margin", 50)
+        if isinstance(margins, int):
+            margins = {key: margins for key in ("top", "right", "bottom", "left")}
 
         rect = self.rect().adjusted(
-            margin,
-            margin,
-            -margin,
-            -margin,
+            margins.get("left", 50),
+            margins.get("top", 50),
+            -margins.get("right", 50),
+            -margins.get("bottom", 50),
         )
 
         position = self.config.get(
@@ -745,21 +755,16 @@ class ScreenSaverWindow(QWidget):
             position
         )
 
-        # sombra
-        painter.setPen(
-            QColor(0, 0, 0, 180)
-        )
-
-        shadow_rect = rect.translated(
-            2,
-            2,
-        )
-
-        painter.drawText(
-            shadow_rect,
-            alignment,
-            text,
-        )
+        shadow = self.config.get("text_shadow", {})
+        if shadow.get("enabled", True):
+            shadow_color = QColor(shadow.get("color", "#000000"))
+            shadow_color.setAlpha(int(shadow.get("opacity", 180)))
+            painter.setPen(shadow_color)
+            shadow_rect = rect.translated(
+                int(shadow.get("offset_x", 2)),
+                int(shadow.get("offset_y", 2)),
+            )
+            painter.drawText(shadow_rect, alignment, text)
 
         painter.setPen(color)
 

@@ -13,6 +13,7 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import (
     QColor,
+    QAction,
     QIcon,
 )
 from PySide6.QtWidgets import (
@@ -27,6 +28,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QListWidget,
+    QListWidgetItem,
     QMainWindow,
     QMessageBox,
     QPushButton,
@@ -81,6 +83,9 @@ class OpenSCRCreator(
             "#FFFFFF"
         )
 
+        self.shadow_color = "#000000"
+        self.background_color = "#000000"
+
         self.setWindowTitle(
             "OpenSCR"
         )
@@ -106,6 +111,8 @@ class OpenSCRCreator(
     # -----------------------------------------------------
 
     def setup_ui(self):
+        self.setup_menu()
+
         central = QWidget()
 
         self.setCentralWidget(
@@ -168,20 +175,12 @@ class OpenSCRCreator(
             "▶ Visualizar"
         )
 
-        self.save_button = QPushButton(
-            "Salvar projeto"
-        )
-
         self.build_button = QPushButton(
             "Gerar .SCR"
         )
 
         self.preview_button.clicked.connect(
             self.preview
-        )
-
-        self.save_button.clicked.connect(
-            self.save_project
         )
 
         self.build_button.clicked.connect(
@@ -195,16 +194,23 @@ class OpenSCRCreator(
         )
 
         buttons.addWidget(
-            self.save_button
-        )
-
-        buttons.addWidget(
             self.build_button
         )
 
         main_layout.addLayout(
             buttons
         )
+
+    def setup_menu(self):
+        file_menu = self.menuBar().addMenu("Arquivo")
+
+        import_action = QAction("Importar configurações...", self)
+        import_action.triggered.connect(self.import_project)
+        file_menu.addAction(import_action)
+
+        export_action = QAction("Exportar configurações...", self)
+        export_action.triggered.connect(self.export_project)
+        file_menu.addAction(export_action)
 
     # -----------------------------------------------------
     # LEFT PANEL
@@ -379,6 +385,51 @@ class OpenSCRCreator(
             animation_group
         )
 
+        background_group = QGroupBox("Fundo")
+        background_form = QFormLayout(background_group)
+        self.background_button = QPushButton("#000000")
+        self.background_button.clicked.connect(self.select_background_color)
+        self.background_preview = QLabel()
+        self.background_preview.setFixedWidth(34)
+        self.background_preview.setStyleSheet(
+            "background-color: #000000; border: 1px solid #777;"
+        )
+        background_layout = QHBoxLayout()
+        background_layout.addWidget(self.background_preview)
+        background_layout.addWidget(self.background_button)
+        background_form.addRow("Cor padrão:", background_layout)
+        layout.addWidget(background_group)
+
+        effects_group = QGroupBox("Efeitos de transição")
+        effects_layout = QVBoxLayout(effects_group)
+        self.effects_list = QListWidget()
+        for label, value in (
+            ("Fade", "fade"),
+            ("Degradê", "gradient"),
+            ("Deslizar para esquerda", "slide_left"),
+            ("Deslizar para direita", "slide_right"),
+            ("Zoom", "zoom"),
+        ):
+            item = QListWidgetItem(label)
+            item.setData(Qt.ItemDataRole.UserRole, value)
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            item.setCheckState(Qt.CheckState.Checked)
+            self.effects_list.addItem(item)
+        effects_layout.addWidget(self.effects_list)
+
+        effects_buttons = QHBoxLayout()
+        all_effects = QPushButton("Todos")
+        no_effects = QPushButton("Nenhum")
+        all_effects.clicked.connect(lambda: self.set_effects_checked(True))
+        no_effects.clicked.connect(lambda: self.set_effects_checked(False))
+        effects_buttons.addWidget(all_effects)
+        effects_buttons.addWidget(no_effects)
+        effects_layout.addLayout(effects_buttons)
+
+        self.random_effects = QCheckBox("Escolher aleatoriamente")
+        effects_layout.addWidget(self.random_effects)
+        layout.addWidget(effects_group)
+
         return panel
 
     # -----------------------------------------------------
@@ -496,6 +547,53 @@ class OpenSCRCreator(
             self.select_color
         )
 
+        self.color_preview = QLabel()
+        self.color_preview.setFixedWidth(34)
+        self.color_preview.setStyleSheet(
+            "background-color: #FFFFFF; border: 1px solid #777;"
+        )
+
+        color_layout = QHBoxLayout()
+        color_layout.addWidget(self.color_preview)
+        color_layout.addWidget(self.color_button)
+
+        self.margin_top = QSpinBox()
+        self.margin_right = QSpinBox()
+        self.margin_bottom = QSpinBox()
+        self.margin_left = QSpinBox()
+        for margin in (
+            self.margin_top,
+            self.margin_right,
+            self.margin_bottom,
+            self.margin_left,
+        ):
+            margin.setRange(0, 1000)
+            margin.setValue(50)
+
+        margins_layout = QHBoxLayout()
+        for label, margin in (
+            ("Sup", self.margin_top),
+            ("Dir", self.margin_right),
+            ("Inf", self.margin_bottom),
+            ("Esq", self.margin_left),
+        ):
+            margins_layout.addWidget(QLabel(label))
+            margins_layout.addWidget(margin)
+
+        self.shadow_enabled = QCheckBox("Sombra ativa")
+        self.shadow_enabled.setChecked(True)
+        self.shadow_enabled.toggled.connect(self.update_shadow_controls)
+        self.shadow_color_button = QPushButton("#000000")
+        self.shadow_color_button.clicked.connect(self.select_shadow_color)
+        self.shadow_x = QSpinBox()
+        self.shadow_y = QSpinBox()
+        for offset in (self.shadow_x, self.shadow_y):
+            offset.setRange(-100, 100)
+            offset.setValue(2)
+        self.shadow_opacity = QSpinBox()
+        self.shadow_opacity.setRange(0, 255)
+        self.shadow_opacity.setValue(180)
+
         form.addRow(
             "Posição:",
             self.text_position,
@@ -508,7 +606,32 @@ class OpenSCRCreator(
 
         form.addRow(
             "Cor:",
-            self.color_button,
+            color_layout,
+        )
+
+        form.addRow(
+            "Margens (sup/dir/inf/esq):",
+            margins_layout,
+        )
+
+        form.addRow(
+            "Sombra:",
+            self.shadow_enabled,
+        )
+
+        form.addRow(
+            "Cor da sombra:",
+            self.shadow_color_button,
+        )
+
+        form.addRow(
+            "Deslocamento X/Y:",
+            self.create_shadow_offset_layout(),
+        )
+
+        form.addRow(
+            "Opacidade da sombra:",
+            self.shadow_opacity,
         )
 
         text_layout.addLayout(
@@ -562,6 +685,28 @@ class OpenSCRCreator(
         )
 
         return panel
+
+    def create_shadow_offset_layout(self):
+        layout = QHBoxLayout()
+        layout.addWidget(self.shadow_x)
+        layout.addWidget(QLabel("/") )
+        layout.addWidget(self.shadow_y)
+        return layout
+
+    def update_shadow_controls(self, enabled):
+        for control in (
+            self.shadow_color_button,
+            self.shadow_x,
+            self.shadow_y,
+            self.shadow_opacity,
+        ):
+            control.setEnabled(enabled)
+
+    def set_effects_checked(self, checked):
+        for index in range(self.effects_list.count()):
+            self.effects_list.item(index).setCheckState(
+                Qt.CheckState.Checked if checked else Qt.CheckState.Unchecked
+            )
 
     # -----------------------------------------------------
     # IMAGES
@@ -643,12 +788,36 @@ class OpenSCRCreator(
             self.color_button.setText(
                 self.text_color.upper()
             )
+            self.color_preview.setStyleSheet(
+                f"background-color: {self.text_color}; border: 1px solid #777;"
+            )
+
+    def select_shadow_color(self):
+        color = QColorDialog.getColor(QColor(self.shadow_color), self)
+        if color.isValid():
+            self.shadow_color = color.name()
+            self.shadow_color_button.setText(self.shadow_color.upper())
+
+    def select_background_color(self):
+        color = QColorDialog.getColor(QColor(self.background_color), self)
+        if color.isValid():
+            self.background_color = color.name()
+            self.background_button.setText(self.background_color.upper())
+            self.background_preview.setStyleSheet(
+                f"background-color: {self.background_color}; border: 1px solid #777;"
+            )
 
     # -----------------------------------------------------
     # CONFIG
     # -----------------------------------------------------
 
     def get_config(self):
+        effects = []
+        for index in range(self.effects_list.count()):
+            item = self.effects_list.item(index)
+            if item.checkState() == Qt.CheckState.Checked:
+                effects.append(item.data(Qt.ItemDataRole.UserRole))
+
         return {
             "images":
                 self.images,
@@ -661,6 +830,12 @@ class OpenSCRCreator(
 
             "transition":
                 self.transition.currentData(),
+
+            "transition_effects":
+                effects,
+
+            "transition_random":
+                self.random_effects.isChecked(),
 
             "image_fit":
                 self.image_fit.currentData(),
@@ -681,10 +856,23 @@ class OpenSCRCreator(
                 self.text_color,
 
             "text_margin":
-                50,
+                {
+                    "top": self.margin_top.value(),
+                    "right": self.margin_right.value(),
+                    "bottom": self.margin_bottom.value(),
+                    "left": self.margin_left.value(),
+                },
+
+            "text_shadow": {
+                "enabled": self.shadow_enabled.isChecked(),
+                "color": self.shadow_color,
+                "offset_x": self.shadow_x.value(),
+                "offset_y": self.shadow_y.value(),
+                "opacity": self.shadow_opacity.value(),
+            },
 
             "background_color":
-                "#000000",
+                self.background_color,
 
             "exit_on_mouse":
                 True,
@@ -710,6 +898,106 @@ class OpenSCRCreator(
                 ensure_ascii=False,
                 indent=4,
             )
+
+    def export_project(self):
+        filename, _ = QFileDialog.getSaveFileName(
+            self,
+            "Exportar configurações",
+            "screensaver.json",
+            "Projeto OpenSCR (*.json)",
+        )
+        if filename:
+            self.write_config(filename)
+
+    def import_project(self):
+        filename, _ = QFileDialog.getOpenFileName(
+            self,
+            "Importar configurações",
+            "",
+            "Projeto OpenSCR (*.json)",
+        )
+        if not filename:
+            return
+        try:
+            with open(filename, "r", encoding="utf-8") as file:
+                config = json.load(file)
+            base_dir = Path(filename).resolve().parent
+            self.images = [
+                str((base_dir / image).resolve())
+                if not Path(image).is_absolute() else image
+                for image in config.get("images", [])
+            ]
+            self.image_list.clear()
+            self.image_list.addItems(self.images)
+            self.apply_config(config)
+        except (OSError, json.JSONDecodeError, TypeError, ValueError) as exc:
+            QMessageBox.critical(self, "OpenSCR", f"Não foi possível importar o projeto.\n\n{exc}")
+
+    def apply_config(self, config):
+        self.display_time.setValue(config.get("display_seconds", 8))
+        self.transition_time.setValue(config.get("transition_seconds", 1.5))
+        self.set_combo_data(self.transition, config.get("transition", "random"))
+        self.set_combo_data(self.image_fit, config.get("image_fit", "cover"))
+        self.text_edit.setPlainText(config.get("text", ""))
+        self.text_enabled.setChecked(config.get("text_enabled", True))
+        self.set_combo_data(self.text_position, config.get("text_position", "bottom_right"))
+        self.text_size.setValue(config.get("text_size", 32))
+        self.text_color = config.get("text_color", "#FFFFFF")
+        self.color_button.setText(self.text_color.upper())
+        self.color_preview.setStyleSheet(
+            f"background-color: {self.text_color}; border: 1px solid #777;"
+        )
+        margins = config.get("text_margin", 50)
+        if isinstance(margins, int):
+            margins = {key: margins for key in ("top", "right", "bottom", "left")}
+        for key, control in (
+            ("top", self.margin_top),
+            ("right", self.margin_right),
+            ("bottom", self.margin_bottom),
+            ("left", self.margin_left),
+        ):
+            control.setValue(margins.get(key, 50))
+        shadow = config.get("text_shadow", {})
+        self.shadow_enabled.setChecked(shadow.get("enabled", True))
+        self.shadow_color = shadow.get("color", "#000000")
+        self.shadow_color_button.setText(self.shadow_color.upper())
+        self.shadow_x.setValue(shadow.get("offset_x", 2))
+        self.shadow_y.setValue(shadow.get("offset_y", 2))
+        self.shadow_opacity.setValue(shadow.get("opacity", 180))
+        self.background_color = config.get("background_color", "#000000")
+        self.background_button.setText(self.background_color.upper())
+        self.background_preview.setStyleSheet(
+            f"background-color: {self.background_color}; border: 1px solid #777;"
+        )
+        configured_effects = config.get(
+            "transition_effects",
+            [
+                "fade",
+                "gradient",
+                "slide_left",
+                "slide_right",
+                "zoom",
+            ],
+        )
+        for index in range(self.effects_list.count()):
+            item = self.effects_list.item(index)
+            item.setCheckState(
+                Qt.CheckState.Checked
+                if item.data(Qt.ItemDataRole.UserRole) in configured_effects
+                else Qt.CheckState.Unchecked
+            )
+        self.random_effects.setChecked(config.get("transition_random", False))
+
+    @staticmethod
+    def set_combo_data(combo, value):
+        index = combo.findData(value)
+        if index >= 0:
+            combo.setCurrentIndex(index)
+
+    def set_busy(self, busy):
+        self.setEnabled(not busy)
+        self.preview_button.setEnabled(not busy)
+        self.build_button.setEnabled(not busy)
 
     # -----------------------------------------------------
     # PREVIEW
@@ -777,6 +1065,7 @@ class OpenSCRCreator(
         self.statusBar().showMessage(
             "Abrindo preview..."
         )
+        self.set_busy(True)
 
         if getattr(
             sys,
@@ -803,6 +1092,7 @@ class OpenSCRCreator(
                         f"{runtime_path}"
                     ),
                 )
+                self.set_busy(False)
                 return
 
             self.preview_process.start(
@@ -875,6 +1165,7 @@ class OpenSCRCreator(
             "Falha ao abrir preview.",
             5000,
         )
+        self.set_busy(False)
 
 
     def on_preview_finished(
@@ -888,6 +1179,7 @@ class OpenSCRCreator(
                 "Preview encerrado.",
                 3000,
             )
+            self.set_busy(False)
             return
 
         log_path = (
@@ -929,25 +1221,11 @@ class OpenSCRCreator(
             "Erro no preview.",
             5000,
         )
+        self.set_busy(False)
 
     # -----------------------------------------------------
     # SAVE PROJECT
     # -----------------------------------------------------
-
-    def save_project(self):
-        filename, _ = QFileDialog.getSaveFileName(
-            self,
-            "Salvar projeto",
-            "screensaver.json",
-            "Projeto OpenSCR (*.json)",
-        )
-
-        if not filename:
-            return
-
-        self.write_config(
-            filename
-        )
 
     # -----------------------------------------------------
     # BUILD
@@ -973,9 +1251,7 @@ class OpenSCRCreator(
         if not filename:
             return
 
-        self.build_button.setEnabled(
-            False
-        )
+        self.set_busy(True)
 
         self.build_button.setText(
             "Gerando..."
@@ -1035,9 +1311,7 @@ class OpenSCRCreator(
 
 
     def on_build_finished(self):
-        self.build_button.setEnabled(
-            True
-        )
+        self.set_busy(False)
 
         self.build_button.setText(
             "Gerar .SCR"
