@@ -125,19 +125,11 @@ Na arquitetura atual, uma exportação utiliza:
 
 ```text
 MeuProtetor.scr
-
-MeuProtetor.data/
-├── config.json
-└── assets/
-    ├── image_0000.jpg
-    ├── image_0001.jpg
-    └── image_0002.png
 ```
 
-O arquivo `.scr` e sua pasta `.data` devem permanecer juntos.
-
-A exportação completamente autocontida em um único arquivo está prevista no roadmap.
-> Não sendo implementado ainda por problemas de falsos positivos em antivírus no Windows
+O arquivo `.scr` é autocontido: o runtime, a configuração e as imagens são
+embutidos como recursos no próprio executável. Nenhuma pasta `.data` ou arquivo
+adicional precisa acompanhar a exportação.
 
 <p align="right">(<a href="#readme-top">voltar ao topo</a>)</p>
 
@@ -223,31 +215,30 @@ python creator.py
 
 ## Build
 
-### Runtime
+### Runtime nativo
 
 O runtime é o motor executado pelos protetores de tela criados pelo OpenSCR.
 
 Para compilá-lo:
 
 ```powershell
-python build_runtime.py
+python build_native_runtime.py
 ```
 
 Serão gerados:
 
 ```text
 resources/
-├── OpenSCRRuntime.exe
-└── OpenSCRRuntime.scr
+└── OpenSCRNativeRuntime.exe
 ```
 
-O `.exe` é utilizado internamente pelo preview da aplicação compilada.
-
-O `.scr` é utilizado como base para os protetores exportados.
+O executável nativo é usado como base para o preview e para os protetores
+exportados. O builder injeta nele a configuração e as imagens e grava um único
+arquivo `.scr` autocontido.
 
 ### Versão portátil
 
-Depois de compilar o runtime:
+Depois de compilar o runtime nativo:
 
 ```powershell
 python build_openscr.py
@@ -275,18 +266,16 @@ OpenSCR/
 │   └── logo.png
 │
 ├── resources/
-│   ├── OpenSCRRuntime.exe
-│   └── OpenSCRRuntime.scr
+│   └── OpenSCRNativeRuntime.exe
 │
 ├── runtime/
 │   ├── __init__.py
-│   ├── app.py
-│   ├── screensaver.py
 │   └── variables.py
 │
 ├── builder.py
+├── native_builder.py
+├── build_native_runtime.py
 ├── build_worker.py
-├── build_runtime.py
 ├── build_openscr.py
 ├── creator.py
 ├── requirements.txt
@@ -298,7 +287,7 @@ OpenSCR/
 
 Responsável pela interface gráfica, edição das configurações e preview.
 
-### Runtime
+### Runtime nativo
 
 Engine responsável por executar o protetor de tela.
 

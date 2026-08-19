@@ -1,190 +1,90 @@
-import json
-import shutil
-import subprocess
-import sys
-import tempfile
-from pathlib import Path
-
-
-ROOT = Path(
-    __file__
-).resolve().parent
-
-
-def resource_path(relative_path):
-    if hasattr(sys, "_MEIPASS"):
-        base = Path(
-            sys._MEIPASS
-        )
-    else:
-        base = ROOT
-
-    return (
-        base
-        / relative_path
-    )
+from native_builder import (
+    build_native_screensaver,
+)
 
 
 def build_screensaver(
     config,
     destination,
 ):
-    destination = Path(
-        destination
-    ).resolve()
-
-    if destination.suffix.lower() != ".scr":
-        destination = (
-            destination.with_suffix(
-                ".scr"
-            )
-        )
-
-    runtime_template = resource_path(
-        "resources/OpenSCRRuntime.scr"
+    images = config.get(
+        "images",
+        []
     )
 
-    if not runtime_template.exists():
-        if getattr(sys, "frozen", False):
-            raise FileNotFoundError(
-                "OpenSCRRuntime.scr não encontrado no aplicativo instalado."
-            )
 
-        build_runtime_script = ROOT / "build_runtime.py"
-        if not build_runtime_script.exists():
-            raise FileNotFoundError(
-                "OpenSCRRuntime.scr não encontrado e build_runtime.py também não existe."
-            )
-
-        result = subprocess.run(
-            [sys.executable, str(build_runtime_script)],
-            cwd=str(ROOT),
-            check=False,
-        )
-        if result.returncode != 0 or not runtime_template.exists():
-            raise RuntimeError(
-                "Não foi possível gerar automaticamente o runtime do OpenSCR."
-            )
-
-    data_dir = destination.with_name(
-        f"{destination.stem}.data"
-    )
-
-    temp_root = Path(
-        tempfile.mkdtemp(
-            prefix="openscr_"
-        )
-    )
-
-    try:
-        temp_data = (
-            temp_root
-            / f"{destination.stem}.data"
+    if not images:
+        raise RuntimeError(
+            "Nenhuma imagem foi configurada."
         )
 
-        assets_dir = (
-            temp_data
-            / "assets"
+
+    margins = config.get("text_margin", 50)
+    if isinstance(margins, dict):
+        margin = min(
+            int(margins.get(side, 50))
+            for side in ("top", "right", "bottom", "left")
         )
+    else:
+        margin = int(margins)
 
-        assets_dir.mkdir(
-            parents=True
-        )
+    return build_native_screensaver(
+        image_paths=images,
 
-        packaged_config = dict(
-            config
-        )
+        destination=destination,
 
-        packaged_images = []
-
-        for index, image in enumerate(
+        display_seconds=float(
             config.get(
-                "images",
-                [],
+                "display_seconds",
+                8
             )
-        ):
-            source = Path(
-                image
+        ),
+
+        transition_seconds=float(
+            config.get(
+                "transition_seconds",
+                1.5
             )
+        ),
 
-            if not source.exists():
-                raise FileNotFoundError(
-                    f"Imagem não encontrada:\n{source}"
-                )
+        transition=config.get(
+            "transition",
+            "random"
+        ),
 
-            extension = (
-                source.suffix.lower()
+        fit=config.get(
+            "image_fit",
+            "cover"
+        ),
+
+        text=config.get(
+            "text",
+            ""
+        ),
+
+        text_enabled=bool(
+            config.get(
+                "text_enabled",
+                True
             )
+        ),
 
-            filename = (
-                f"image_{index:04d}"
-                f"{extension}"
+        text_size=int(
+            config.get(
+                "text_size",
+                34
             )
+        ),
 
-            target = (
-                assets_dir
-                / filename
-            )
+        text_color=config.get(
+            "text_color",
+            "#FFFFFF"
+        ),
 
-            shutil.copy2(
-                source,
-                target,
-            )
+        text_position=config.get(
+            "text_position",
+            "bottom_right"
+        ),
 
-            packaged_images.append(
-                f"assets/{filename}"
-            )
-
-        packaged_config[
-            "images"
-        ] = packaged_images
-
-        config_file = (
-            temp_data
-            / "config.json"
-        )
-
-        with config_file.open(
-            "w",
-            encoding="utf-8",
-        ) as file:
-            json.dump(
-                packaged_config,
-                file,
-                ensure_ascii=False,
-                indent=4,
-            )
-
-        destination.parent.mkdir(
-            parents=True,
-            exist_ok=True,
-        )
-
-        if destination.exists():
-            destination.unlink()
-
-        if data_dir.exists():
-            shutil.rmtree(
-                data_dir
-            )
-
-        shutil.copy2(
-            runtime_template,
-            destination,
-        )
-
-        shutil.copytree(
-            temp_data,
-            data_dir,
-        )
-
-    finally:
-        shutil.rmtree(
-            temp_root,
-            ignore_errors=True,
-        )
-
-    return (
-        destination,
-        data_dir,
+        text_margin=margin,
     )

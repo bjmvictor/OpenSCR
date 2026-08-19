@@ -43,16 +43,12 @@ RESOURCES_DIR = (
 )
 
 
-RUNTIME_EXE = (
+RUNTIME_NATIVE = (
     RESOURCES_DIR
-    / "OpenSCRRuntime.exe"
+    /
+    "OpenSCRNativeRuntime.exe"
 )
 
-
-RUNTIME_SCR = (
-    RESOURCES_DIR
-    / "OpenSCRRuntime.scr"
-)
 
 
 BUILD_DIR = (
@@ -90,8 +86,7 @@ def print_header():
 def validate_files():
     required_files = [
         CREATOR_FILE,
-        RUNTIME_EXE,
-        RUNTIME_SCR,
+        RUNTIME_NATIVE,
     ]
 
     missing = [
@@ -119,7 +114,7 @@ def validate_files():
 
         print()
         print(
-            "  python build_runtime.py"
+            "  python build_native_runtime.py"
         )
 
         raise SystemExit(1)
@@ -260,13 +255,7 @@ def build():
 
     add_data_argument(
         command,
-        RUNTIME_EXE,
-        "resources",
-    )
-
-    add_data_argument(
-        command,
-        RUNTIME_SCR,
+        RUNTIME_NATIVE,
         "resources",
     )
 

@@ -1,4 +1,3 @@
-
 from PySide6.QtCore import (
     QThread,
     Signal,
@@ -10,14 +9,10 @@ from builder import (
 
 
 class ScrBuildThread(QThread):
-    succeeded = Signal(
-        str,
-        str,
-    )
+    succeeded = Signal(str)
 
-    failed = Signal(
-        str,
-    )
+    failed = Signal(str)
+
 
     def __init__(
         self,
@@ -30,20 +25,22 @@ class ScrBuildThread(QThread):
         )
 
         self.config = config
+
         self.destination = destination
+
 
     def run(self):
         try:
-            scr, data_dir = (
+            scr_path = (
                 build_screensaver(
                     self.config,
                     self.destination,
                 )
             )
 
+
             self.succeeded.emit(
-                str(scr),
-                str(data_dir),
+                str(scr_path)
             )
 
         except Exception as exc:

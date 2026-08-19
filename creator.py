@@ -1,8 +1,12 @@
 import ctypes
 import json
 import os
-import subprocess
 import sys
+import tempfile
+
+from builder import (
+    build_screensaver,
+)
 from build_worker import (
     ScrBuildThread,
 )
@@ -12,8 +16,8 @@ from PySide6.QtCore import (
     QProcess,
 )
 from PySide6.QtGui import (
-    QColor,
     QAction,
+    QColor,
     QIcon,
 )
 from PySide6.QtWidgets import (
@@ -39,7 +43,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from runtime.variables import (
+from openscr_variables import (
     AVAILABLE_VARIABLES,
 )
 
@@ -112,7 +116,6 @@ class OpenSCRCreator(
 
     def setup_ui(self):
         self.setup_menu()
-
         central = QWidget()
 
         self.setCentralWidget(
@@ -417,14 +420,14 @@ class OpenSCRCreator(
             self.effects_list.addItem(item)
         effects_layout.addWidget(self.effects_list)
 
-        effects_buttons = QHBoxLayout()
+        effect_buttons = QHBoxLayout()
         all_effects = QPushButton("Todos")
         no_effects = QPushButton("Nenhum")
         all_effects.clicked.connect(lambda: self.set_effects_checked(True))
         no_effects.clicked.connect(lambda: self.set_effects_checked(False))
-        effects_buttons.addWidget(all_effects)
-        effects_buttons.addWidget(no_effects)
-        effects_layout.addLayout(effects_buttons)
+        effect_buttons.addWidget(all_effects)
+        effect_buttons.addWidget(no_effects)
+        effects_layout.addLayout(effect_buttons)
 
         self.random_effects = QCheckBox("Escolher aleatoriamente")
         effects_layout.addWidget(self.random_effects)
@@ -567,7 +570,7 @@ class OpenSCRCreator(
             self.margin_bottom,
             self.margin_left,
         ):
-            margin.setRange(0, 1000)
+            margin.setRange(0, 2000)
             margin.setValue(50)
 
         margins_layout = QHBoxLayout()
@@ -689,9 +692,16 @@ class OpenSCRCreator(
     def create_shadow_offset_layout(self):
         layout = QHBoxLayout()
         layout.addWidget(self.shadow_x)
-        layout.addWidget(QLabel("/") )
+        layout.addWidget(QLabel("/"))
         layout.addWidget(self.shadow_y)
         return layout
+
+    def set_effects_checked(self, checked):
+        for index in range(self.effects_list.count()):
+            self.effects_list.item(index).setCheckState(
+                Qt.CheckState.Checked
+                if checked else Qt.CheckState.Unchecked
+            )
 
     def update_shadow_controls(self, enabled):
         for control in (
@@ -701,12 +711,6 @@ class OpenSCRCreator(
             self.shadow_opacity,
         ):
             control.setEnabled(enabled)
-
-    def set_effects_checked(self, checked):
-        for index in range(self.effects_list.count()):
-            self.effects_list.item(index).setCheckState(
-                Qt.CheckState.Checked if checked else Qt.CheckState.Unchecked
-            )
 
     # -----------------------------------------------------
     # IMAGES
@@ -918,6 +922,7 @@ class OpenSCRCreator(
         )
         if not filename:
             return
+
         try:
             with open(filename, "r", encoding="utf-8") as file:
                 config = json.load(file)
@@ -931,7 +936,11 @@ class OpenSCRCreator(
             self.image_list.addItems(self.images)
             self.apply_config(config)
         except (OSError, json.JSONDecodeError, TypeError, ValueError) as exc:
-            QMessageBox.critical(self, "OpenSCR", f"Não foi possível importar o projeto.\n\n{exc}")
+            QMessageBox.critical(
+                self,
+                "OpenSCR",
+                f"Não foi possível importar o projeto.\n\n{exc}",
+            )
 
     def apply_config(self, config):
         self.display_time.setValue(config.get("display_seconds", 8))
@@ -942,11 +951,13 @@ class OpenSCRCreator(
         self.text_enabled.setChecked(config.get("text_enabled", True))
         self.set_combo_data(self.text_position, config.get("text_position", "bottom_right"))
         self.text_size.setValue(config.get("text_size", 32))
+
         self.text_color = config.get("text_color", "#FFFFFF")
         self.color_button.setText(self.text_color.upper())
         self.color_preview.setStyleSheet(
             f"background-color: {self.text_color}; border: 1px solid #777;"
         )
+
         margins = config.get("text_margin", 50)
         if isinstance(margins, int):
             margins = {key: margins for key in ("top", "right", "bottom", "left")}
@@ -957,6 +968,7 @@ class OpenSCRCreator(
             ("left", self.margin_left),
         ):
             control.setValue(margins.get(key, 50))
+
         shadow = config.get("text_shadow", {})
         self.shadow_enabled.setChecked(shadow.get("enabled", True))
         self.shadow_color = shadow.get("color", "#000000")
@@ -964,20 +976,16 @@ class OpenSCRCreator(
         self.shadow_x.setValue(shadow.get("offset_x", 2))
         self.shadow_y.setValue(shadow.get("offset_y", 2))
         self.shadow_opacity.setValue(shadow.get("opacity", 180))
+
         self.background_color = config.get("background_color", "#000000")
         self.background_button.setText(self.background_color.upper())
         self.background_preview.setStyleSheet(
             f"background-color: {self.background_color}; border: 1px solid #777;"
         )
+
         configured_effects = config.get(
             "transition_effects",
-            [
-                "fade",
-                "gradient",
-                "slide_left",
-                "slide_right",
-                "zoom",
-            ],
+            ["fade", "gradient", "slide_left", "slide_right", "zoom"],
         )
         for index in range(self.effects_list.count()):
             item = self.effects_list.item(index)
@@ -994,11 +1002,6 @@ class OpenSCRCreator(
         if index >= 0:
             combo.setCurrentIndex(index)
 
-    def set_busy(self, busy):
-        self.setEnabled(not busy)
-        self.preview_button.setEnabled(not busy)
-        self.build_button.setEnabled(not busy)
-
     # -----------------------------------------------------
     # PREVIEW
     # -----------------------------------------------------
@@ -1012,109 +1015,102 @@ class OpenSCRCreator(
             )
             return
 
-        project_dir = Path(
-            __file__
-        ).resolve().parent
 
-        config_path = (
-            project_dir
-            / "preview_config.json"
+        preview_dir = (
+            Path(
+                tempfile.gettempdir()
+            )
+            /
+            "OpenSCR"
         )
 
-        self.write_config(
-            str(config_path)
+
+        preview_dir.mkdir(
+            parents=True,
+            exist_ok=True,
         )
 
-        # Evita iniciar dois previews simultaneamente
+
+        preview_path = (
+            preview_dir
+            /
+            "OpenSCRPreview.scr"
+        )
+
+
+        try:
+            build_screensaver(
+                self.get_config(),
+                preview_path,
+            )
+
+        except Exception as exc:
+            QMessageBox.critical(
+                self,
+                "OpenSCR",
+                (
+                    "Não foi possível gerar "
+                    "o preview.\n\n"
+                    f"{exc}"
+                ),
+            )
+
+            return
+
+
         if (
             self.preview_process is not None
-            and self.preview_process.state()
-            != QProcess.ProcessState.NotRunning
+            and
+            self.preview_process.state()
+            !=
+            QProcess.ProcessState.NotRunning
         ):
             self.preview_process.kill()
+
             self.preview_process.waitForFinished(
                 2000
             )
 
+
         self.preview_output = ""
+
 
         self.preview_process = QProcess(
             self
         )
 
-        self.preview_process.setWorkingDirectory(
-            str(project_dir)
+
+        self.preview_process.setProgram(
+            str(
+                preview_path
+            )
         )
 
-        self.preview_process.setProcessChannelMode(
-            QProcess.ProcessChannelMode.MergedChannels
+
+        self.preview_process.setArguments(
+            [
+                "/s"
+            ]
         )
 
-        self.preview_process.readyReadStandardOutput.connect(
-            self.on_preview_output
-        )
 
         self.preview_process.errorOccurred.connect(
             self.on_preview_process_error
         )
 
+
         self.preview_process.finished.connect(
             self.on_preview_finished
         )
+
 
         self.statusBar().showMessage(
             "Abrindo preview..."
         )
         self.set_busy(True)
 
-        if getattr(
-            sys,
-            "frozen",
-            False,
-        ):
-            base_path = Path(
-                sys._MEIPASS
-            )
 
-            runtime_path = (
-                base_path
-                / "resources"
-                / "OpenSCRRuntime.exe"
-            )
-
-            if not runtime_path.exists():
-                QMessageBox.critical(
-                    self,
-                    "OpenSCR",
-                    (
-                        "O runtime de preview "
-                        "não foi encontrado.\n\n"
-                        f"{runtime_path}"
-                    ),
-                )
-                self.set_busy(False)
-                return
-
-            self.preview_process.start(
-                str(runtime_path),
-                [
-                    "--config",
-                    str(config_path),
-                    "/s",
-                ],
-            )
-
-        else:
-            self.preview_process.start(
-                sys.executable,
-                [
-                    "-m",
-                    "runtime.app",
-                    "--config",
-                    str(config_path),
-                    "/s",
-                ],
-            )
+        self.preview_process.start()
 
     def on_preview_output(self):
         if not self.preview_process:
@@ -1224,10 +1220,6 @@ class OpenSCRCreator(
         self.set_busy(False)
 
     # -----------------------------------------------------
-    # SAVE PROJECT
-    # -----------------------------------------------------
-
-    # -----------------------------------------------------
     # BUILD
     # -----------------------------------------------------
 
@@ -1284,7 +1276,6 @@ class OpenSCRCreator(
     def on_build_success(
         self,
         scr_path,
-        data_path,
     ):
         QMessageBox.information(
             self,
@@ -1293,9 +1284,18 @@ class OpenSCRCreator(
                 "Protetor de tela criado "
                 "com sucesso.\n\n"
                 f"{scr_path}\n\n"
-                "Os dados do protetor estão em:\n"
-                f"{data_path}"
+                "O arquivo .SCR é "
+                "autossuficiente."
             ),
+        )
+
+
+        self.statusBar().showMessage(
+            (
+                "Protetor de tela criado "
+                "com sucesso."
+            ),
+            5000,
         )
 
 
@@ -1326,6 +1326,11 @@ class OpenSCRCreator(
             self.build_thread.deleteLater()
 
         self.build_thread = None
+
+    def set_busy(self, busy):
+        self.setEnabled(not busy)
+        self.preview_button.setEnabled(not busy)
+        self.build_button.setEnabled(not busy)
 
 def main():
     configure_windows_app_id()
