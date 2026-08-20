@@ -67,6 +67,8 @@ Entre os principais objetivos estão:
 - Degradê.
 - Slide para esquerda.
 - Slide para direita.
+- Slide para cima.
+- Slide para baixo.
 - Zoom.
 - Seleção aleatória de efeitos.
 - Controle independente da duração da transição.
@@ -110,6 +112,16 @@ Também é possível configurar:
 - cor;
 - margem;
 - exibição ou ocultação do texto.
+
+Na caixa de texto, selecione um trecho e use os controles de formatação para
+aplicar negrito, itálico ou tamanho diferente. O formato é salvo no projeto e
+interpretado pelo runtime nativo com estas marcações:
+
+```text
+[b]negrito[/b]
+[i]itálico[/i]
+[size=48]texto maior[/size]
+```
 
 ### Preview
 
@@ -162,6 +174,16 @@ Para executar o projeto em ambiente de desenvolvimento:
 - Python 3
 - Git
 - Windows >= 10
+
+Para executar somente uma release já gerada, o usuário final não precisa de
+Python, CMake ou Visual Studio. Essas ferramentas são necessárias apenas para
+desenvolver e recompilar o runtime nativo.
+
+Para gerar uma release a partir do código-fonte, instale também:
+
+- CMake 3.24 ou superior;
+- Visual Studio 2022 Build Tools com o workload de C++ para desktop e Windows SDK;
+- ferramentas `cmake` e `msbuild` disponíveis no terminal.
 
 ### Instalação
 
@@ -234,11 +256,19 @@ resources/
 
 O executável nativo é usado como base para o preview e para os protetores
 exportados. O builder injeta nele a configuração e as imagens e grava um único
-arquivo `.scr` autocontido.
+arquivo `.scr` autocontido, mantendo o ícone do OpenSCR.
+
+O runtime precisa ser recompilado sempre que `native/runtime/src/main.cpp` ou o
+formato binário de `RuntimeConfig`/`TextConfig` mudar:
+
+```powershell
+python build_native_runtime.py
+```
 
 ### Versão portátil
 
-Depois de compilar o runtime nativo:
+Depois de compilar o runtime nativo, a versão portátil padrão usa o modo
+`onedir`, que inicia rapidamente porque não extrai dezenas de MB a cada abertura:
 
 ```powershell
 python build_openscr.py
@@ -248,10 +278,31 @@ O executável será criado em:
 
 ```text
 release/
-└── OpenSCR-0.1.0-alpha-Portable.exe
+└── OpenSCR-2.0.2-Portable/
+  ├── OpenSCR.exe
+  └── _internal/
 ```
 
-A versão portátil contém as dependências necessárias e não exige uma instalação local do Python.
+A pasta inteira deve ser mantida junta. O arquivo a executar é `OpenSCR.exe`.
+A versão portátil contém as dependências necessárias e não exige Python local.
+
+O arquivo `assets/OpenSCR.ico` inclui resoluções de 16 até 256 pixels. Se o
+Windows continuar exibindo um ícone borrado após substituir a release, ele
+provavelmente está usando o cache antigo do Explorer. Feche as janelas do
+Explorer e reinicie o computador, ou limpe o cache de ícones antes de testar o
+novo executável.
+
+Para gerar um único `.exe`, aceitando o tempo maior de inicialização da extração:
+
+```powershell
+$env:OPENSCR_ONEFILE = "1"
+python build_openscr.py
+```
+
+Uma release funcional deve incluir o executável portátil gerado em `release/`
+e, se também for distribuir o criador de `.scr`, o runtime nativo presente em
+`resources/OpenSCRNativeRuntime.exe` durante o build. O usuário final não deve
+precisar executar CMake ou instalar compiladores.
 
 <p align="right">(<a href="#readme-top">voltar ao topo</a>)</p>
 
@@ -313,7 +364,11 @@ Não é recomendado desativar permanentemente o antivírus para utilizar o OpenS
 
 Caso uma versão oficial seja detectada incorretamente, recomenda-se reportar o arquivo como falso positivo ao fornecedor da solução de segurança.
 
-Assinatura digital dos executáveis e builds automatizados estão previstos para versões futuras.
+O formato single-file reduz a necessidade de arquivos auxiliares e evita a
+estrutura antiga `.scr` + `.data`, mas não garante ausência de falsos positivos.
+Uma release pública deve ser assinada digitalmente e distribuída por um canal
+confiável; assinatura, reputação do arquivo e submissão aos fornecedores de
+antivírus são importantes para reduzir alertas.
 
 <p align="right">(<a href="#readme-top">voltar ao topo</a>)</p>
 

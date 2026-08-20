@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.24)
 
 project(
     OpenSCRNativeRuntime
-    VERSION 0.1.0
+    VERSION 2.0.2
     LANGUAGES CXX
 )
 
@@ -10,6 +10,7 @@ add_executable(
     OpenSCRNativeRuntime
     WIN32
     src/main.cpp
+    src/OpenSCRNativeRuntime.rc
 )
 
 target_compile_features(

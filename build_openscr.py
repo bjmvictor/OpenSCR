@@ -11,7 +11,7 @@ from pathlib import Path
 # ============================================================
 
 APP_NAME = "OpenSCR"
-APP_VERSION = "0.1.0-alpha"
+APP_VERSION = "2.0.2"
 
 
 ROOT_DIR = Path(
@@ -34,6 +34,12 @@ ASSETS_DIR = (
 ICON_FILE = (
     ASSETS_DIR
     / "OpenSCR.ico"
+)
+
+
+SPLASH_FILE = (
+    ASSETS_DIR
+    / "splash.png"
 )
 
 
@@ -131,6 +137,18 @@ def clean_previous_build():
             ignore_errors=True,
         )
 
+    if DIST_DIR.exists():
+        shutil.rmtree(
+            DIST_DIR,
+            ignore_errors=True,
+        )
+
+    if RELEASE_DIR.exists():
+        shutil.rmtree(
+            RELEASE_DIR,
+            ignore_errors=True,
+        )
+
     BUILD_DIR.mkdir(
         parents=True,
         exist_ok=True,
@@ -186,6 +204,12 @@ def build():
 
     print()
 
+    onefile = os.environ.get("OPENSCR_ONEFILE", "").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+
     command = [
         sys.executable,
         "-m",
@@ -193,9 +217,6 @@ def build():
 
         "--noconfirm",
         "--clean",
-
-        # Aplicação portátil em um único EXE.
-        "--onefile",
 
         # Não abrir console ao iniciar.
         "--windowed",
@@ -221,6 +242,16 @@ def build():
         "--paths",
         str(ROOT_DIR),
     ]
+
+    command.append("--onefile" if onefile else "--onedir")
+
+    if SPLASH_FILE.exists():
+        command.extend(
+            [
+                "--splash",
+                str(SPLASH_FILE),
+            ]
+        )
 
     # --------------------------------------------------------
     # Ícone
@@ -305,6 +336,10 @@ def build():
     generated_exe = (
         DIST_DIR
         / f"{APP_NAME}.exe"
+        if onefile
+        else DIST_DIR
+        / APP_NAME
+        / f"{APP_NAME}.exe"
     )
 
     if not generated_exe.exists():
@@ -319,23 +354,21 @@ def build():
     # Portable release
     # ========================================================
 
-    portable_name = (
-        f"{APP_NAME}-"
-        f"{APP_VERSION}-Portable.exe"
-    )
-
-    portable_file = (
-        RELEASE_DIR
-        / portable_name
-    )
-
-    if portable_file.exists():
-        portable_file.unlink()
-
-    shutil.copy2(
-        generated_exe,
-        portable_file,
-    )
+    if onefile:
+        portable_name = (
+            f"{APP_NAME}-"
+            f"{APP_VERSION}-Portable.exe"
+        )
+        portable_file = RELEASE_DIR / portable_name
+        if portable_file.exists():
+            portable_file.unlink()
+        shutil.copy2(generated_exe, portable_file)
+    else:
+        portable_dir = RELEASE_DIR / f"{APP_NAME}-{APP_VERSION}-Portable"
+        if portable_dir.exists():
+            shutil.rmtree(portable_dir, ignore_errors=True)
+        shutil.copytree(DIST_DIR / APP_NAME, portable_dir)
+        portable_file = portable_dir / f"{APP_NAME}.exe"
 
     # ========================================================
     # Result
@@ -357,9 +390,9 @@ def build():
         f"Arquivo: {portable_file}"
     )
 
-    print(
-        f"Tamanho: {size_mb:.2f} MB"
-    )
+    print(f"Tamanho: {size_mb:.2f} MB")
+    if not onefile:
+        print("Modo: onedir (inicialização rápida)")
 
     print()
     print(

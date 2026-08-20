@@ -1,6 +1,7 @@
 import ctypes
+import importlib
 import json
-import os
+import re
 import sys
 import tempfile
 
@@ -14,13 +15,16 @@ from pathlib import Path
 from PySide6.QtCore import (
     Qt,
     QProcess,
-    QSize
+    QSize,
+    QSettings,
+    QTimer,
 )
 from PySide6.QtGui import (
     QAction,
     QColor,
     QIcon,
-    QPixmap
+    QPixmap,
+    QTextCharFormat,
 )
 from PySide6.QtWidgets import (
     QApplication,
@@ -40,12 +44,14 @@ from PySide6.QtWidgets import (
     QPushButton,
     QSpinBox,
     QSplitter,
+    QSplashScreen,
     QTextEdit,
     QVBoxLayout,
     QWidget,
     QAbstractItemView,
     QListView
 )
+from PySide6.QtWidgets import QSizePolicy
 
 from openscr_variables import (
     AVAILABLE_VARIABLES,
@@ -84,6 +90,11 @@ class OpenSCRCreator(
         self.build_thread = None
         self.preview_process = None
         self.preview_output = ""
+        self.current_project_path = None
+        self.recent_menu = None
+        self.loading_index = 0
+        self.loading_timer = QTimer(self)
+        self.loading_timer.timeout.connect(self.update_loading_indicator)
 
         self.images = []
 
@@ -129,6 +140,8 @@ class OpenSCRCreator(
         main_layout = QVBoxLayout(
             central
         )
+        main_layout.setContentsMargins(6, 4, 6, 6)
+        main_layout.setSpacing(6)
 
         title = QLabel(
             "OpenSCR"
@@ -151,7 +164,8 @@ class OpenSCRCreator(
 
         header = QHBoxLayout()
 
-        brand = QVBoxLayout()
+        brand = QHBoxLayout()
+        brand.setSpacing(10)
         brand.addWidget(title)
         brand.addWidget(subtitle)
 
@@ -182,6 +196,14 @@ class OpenSCRCreator(
             self.build_button
         )
 
+        self.loading_label = QLabel()
+        self.loading_label.setMinimumWidth(110)
+        self.loading_label.setVisible(False)
+        header.addWidget(self.loading_label)
+
+        header.setContentsMargins(0, 0, 0, 4)
+        header.setSpacing(6)
+
         main_layout.addLayout(
             header
         )
@@ -202,51 +224,39 @@ class OpenSCRCreator(
         splitter.addWidget(right)
 
         splitter.setSizes(
-            [600, 400]
+            [500, 500]
         )
-
-        buttons = QHBoxLayout()
-
-        self.preview_button = QPushButton(
-            "▶ Visualizar"
-        )
-
-        self.build_button = QPushButton(
-            "Gerar .SCR"
-        )
-
-        self.preview_button.clicked.connect(
-            self.preview
-        )
-
-        self.build_button.clicked.connect(
-            self.build_scr
-        )
-
-        buttons.addStretch()
-
-        buttons.addWidget(
-            self.preview_button
-        )
-
-        buttons.addWidget(
-            self.build_button
-        )
-
-        main_layout.addLayout(
-            buttons
-        )
+        splitter.setStretchFactor(0, 1)
+        splitter.setStretchFactor(1, 1)
 
     def setup_menu(self):
         file_menu = self.menuBar().addMenu("Arquivo")
 
-        import_action = QAction("Importar configurações...", self)
-        import_action.triggered.connect(self.import_project)
-        file_menu.addAction(import_action)
+        open_action = QAction("Abrir projeto...", self)
+        open_action.setShortcut("Ctrl+O")
+        open_action.triggered.connect(
+            lambda checked=False: self.import_project()
+        )
+        file_menu.addAction(open_action)
 
-        export_action = QAction("Exportar configurações...", self)
-        export_action.triggered.connect(self.export_project)
-        file_menu.addAction(export_action)
+        self.recent_menu = file_menu.addMenu("Recentes")
+        self.update_recent_projects_menu()
+        file_menu.addSeparator()
+
+        save_action = QAction("Salvar", self)
+        save_action.setShortcut("Ctrl+S")
+        save_action.triggered.connect(self.save_project)
+        file_menu.addAction(save_action)
+
+        save_as_action = QAction("Salvar como...", self)
+        save_as_action.setShortcut("Ctrl+Shift+S")
+        save_as_action.triggered.connect(self.save_project_as)
+        file_menu.addAction(save_as_action)
+        file_menu.addSeparator()
+
+        exit_action = QAction("Sair", self)
+        exit_action.triggered.connect(self.close)
+        file_menu.addAction(exit_action)
 
     # -----------------------------------------------------
     # LEFT PANEL
@@ -342,6 +352,16 @@ class OpenSCRCreator(
         )
 
         image_buttons.addWidget(
+            QLabel("Ordem:")
+        )
+
+        self.image_order = QComboBox()
+        self.image_order.addItem("Ordenado", "forward")
+        self.image_order.addItem("Reverso", "reverse")
+        self.image_order.addItem("Aleatório", "random")
+        image_buttons.addWidget(self.image_order)
+
+        image_buttons.addWidget(
             add_image
         )
 
@@ -364,28 +384,6 @@ class OpenSCRCreator(
 
         animation_form = QFormLayout(
             animation_group
-        )
-
-        self.image_order = QComboBox()
-
-        self.image_order.addItem(
-            "Ordenado",
-            "forward",
-        )
-
-        self.image_order.addItem(
-            "Reverso",
-            "reverse",
-        )
-
-        self.image_order.addItem(
-            "Aleatório",
-            "random",
-        )
-
-        animation_form.addRow(
-            "Ordem das imagens:",
-            self.image_order,
         )
 
         self.display_time = (
@@ -514,6 +512,8 @@ class OpenSCRCreator(
             ("Deslizar para esquerda", "slide_left"),
             ("Deslizar para direita", "slide_right"),
             ("Zoom", "zoom"),
+            ("Deslizar para cima", "slide_up"),
+            ("Deslizar para baixo", "slide_down"),
         ):
             item = QListWidgetItem(label)
             item.setData(Qt.ItemDataRole.UserRole, value)
@@ -542,11 +542,13 @@ class OpenSCRCreator(
     # -----------------------------------------------------
 
     def create_right_panel(self):
-        panel = QWidget()
+        content = QWidget()
 
         layout = QVBoxLayout(
-            panel
+            content
         )
+        layout.setContentsMargins(6, 6, 6, 6)
+        layout.setSpacing(8)
 
         text_group = QGroupBox(
             "Texto sobre a tela"
@@ -569,6 +571,11 @@ class OpenSCRCreator(
         )
 
         self.text_edit = QTextEdit()
+        self.text_edit.setMinimumHeight(120)
+        self.text_edit.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Expanding,
+        )
 
         self.text_edit.setPlaceholderText(
             "Digite seu texto aqui...\n\n"
@@ -585,6 +592,22 @@ class OpenSCRCreator(
         text_layout.addWidget(
             self.text_edit
         )
+
+        format_bar = QHBoxLayout()
+        bold_button = QPushButton("B")
+        italic_button = QPushButton("I")
+        self.inline_size = QSpinBox()
+        self.inline_size.setRange(8, 200)
+        self.inline_size.setValue(48)
+        size_button = QPushButton("Aplicar tamanho")
+        bold_button.clicked.connect(self.apply_inline_bold)
+        italic_button.clicked.connect(self.apply_inline_italic)
+        size_button.clicked.connect(self.apply_inline_size)
+        format_bar.addWidget(bold_button)
+        format_bar.addWidget(italic_button)
+        format_bar.addWidget(self.inline_size)
+        format_bar.addWidget(size_button)
+        text_layout.addLayout(format_bar)
 
         form = QFormLayout()
 
@@ -690,7 +713,7 @@ class OpenSCRCreator(
         )
 
         self.shadow_enabled.setChecked(
-            True
+            False
         )
 
 
@@ -798,21 +821,6 @@ class OpenSCRCreator(
             self.shadow_enabled.isChecked()
         )
 
-        form.addRow(
-            "Cor da sombra:",
-            self.shadow_color_button,
-        )
-
-        form.addRow(
-            "Deslocamento X/Y:",
-            self.create_shadow_offset_layout(),
-        )
-
-        form.addRow(
-            "Opacidade da sombra:",
-            self.shadow_opacity,
-        )
-
         text_layout.addLayout(
             form
         )
@@ -863,7 +871,7 @@ class OpenSCRCreator(
             variables_group
         )
 
-        return panel
+        return content
 
     def create_shadow_offset_layout(self):
         layout = QHBoxLayout()
@@ -1007,14 +1015,6 @@ class OpenSCRCreator(
 
         return item
 
-    def update_shadow_controls(
-        self,
-        enabled,
-    ):
-        self.shadow_options.setVisible(
-            enabled
-        )
-
     # -----------------------------------------------------
     # IMAGES
     # -----------------------------------------------------
@@ -1079,6 +1079,99 @@ class OpenSCRCreator(
 
         self.text_edit.setFocus()
 
+    def apply_inline_bold(self):
+        cursor = self.text_edit.textCursor()
+        if not cursor.hasSelection():
+            return
+        format = QTextCharFormat()
+        format.setFontWeight(
+            400 if cursor.charFormat().fontWeight() >= 600 else 700
+        )
+        cursor.mergeCharFormat(format)
+        self.text_edit.setTextCursor(cursor)
+
+    def apply_inline_italic(self):
+        cursor = self.text_edit.textCursor()
+        if not cursor.hasSelection():
+            return
+        format = QTextCharFormat()
+        format.setFontItalic(not cursor.charFormat().fontItalic())
+        cursor.mergeCharFormat(format)
+        self.text_edit.setTextCursor(cursor)
+
+    def apply_inline_size(self):
+        cursor = self.text_edit.textCursor()
+        if not cursor.hasSelection():
+            return
+        format = QTextCharFormat()
+        format.setFontPointSize(self.inline_size.value())
+        cursor.mergeCharFormat(format)
+        self.text_edit.setTextCursor(cursor)
+
+    def get_formatted_text(self):
+        parts = []
+        document = self.text_edit.document()
+        for block_index in range(document.blockCount()):
+            block = document.findBlockByNumber(block_index)
+            iterator = block.begin()
+            while not iterator.atEnd():
+                fragment = iterator.fragment()
+                text = fragment.text()
+                if not text:
+                    iterator += 1
+                    continue
+                format = fragment.charFormat()
+                if format.fontWeight() >= 600:
+                    text = f"[b]{text}[/b]"
+                if format.fontItalic():
+                    text = f"[i]{text}[/i]"
+                point_size = format.fontPointSize()
+                if point_size and int(point_size) != self.text_size.value():
+                    text = f"[size={int(point_size)}]{text}[/size]"
+                parts.append(text)
+                iterator += 1
+            if block_index < document.blockCount() - 1:
+                parts.append("\n")
+        return "".join(parts)
+
+    def set_formatted_text(self, markup):
+        self.text_edit.clear()
+        cursor = self.text_edit.textCursor()
+        bold = False
+        italic = False
+        size = self.text_size.value()
+        tokens = re.split(
+            r"(\[/?b\]|\[/?i\]|\[size=\d+\]|\[/size\])",
+            str(markup),
+        )
+        for token in tokens:
+            if not token:
+                continue
+            if token == "[b]":
+                bold = True
+                continue
+            if token == "[/b]":
+                bold = False
+                continue
+            if token == "[i]":
+                italic = True
+                continue
+            if token == "[/i]":
+                italic = False
+                continue
+            if token.startswith("[size="):
+                size = int(token[6:-1])
+                continue
+            if token == "[/size]":
+                size = self.text_size.value()
+                continue
+            format = QTextCharFormat()
+            format.setFontWeight(700 if bold else 400)
+            format.setFontItalic(italic)
+            format.setFontPointSize(size)
+            cursor.insertText(token, format)
+        self.text_edit.setTextCursor(cursor)
+
     def select_color(self):
         color = QColorDialog.getColor(
             QColor(
@@ -1119,6 +1212,7 @@ class OpenSCRCreator(
     # -----------------------------------------------------
 
     def get_config(self):
+        self.sync_images_from_widget()
         effects = []
         for index in range(self.effects_list.count()):
             item = self.effects_list.item(index)
@@ -1148,7 +1242,7 @@ class OpenSCRCreator(
                 self.image_fit.currentData(),
 
             "text":
-                self.text_edit.toPlainText(),
+                self.get_formatted_text(),
 
             "text_enabled":
                 self.text_enabled.isChecked(),
@@ -1209,25 +1303,100 @@ class OpenSCRCreator(
                 indent=4,
             )
 
+    def update_window_title(self):
+        if self.current_project_path:
+            title = f"{Path(self.current_project_path).name} - OpenSCR"
+        else:
+            title = "OpenSCR"
+        self.setWindowTitle(title)
+
+    def get_recent_projects(self):
+        settings = QSettings("bjmvictor", "OpenSCR")
+        paths = settings.value(
+            "recent_projects",
+            [],
+        )
+        if isinstance(paths, str):
+            paths = [paths]
+        if not isinstance(paths, list):
+            paths = []
+        valid_paths = [path for path in paths if Path(path).exists()][:10]
+        if valid_paths != paths:
+            settings.setValue("recent_projects", valid_paths)
+        return valid_paths
+
+    def add_recent_project(self, path):
+        path = str(Path(path).resolve())
+        paths = [item for item in self.get_recent_projects() if item != path]
+        paths.insert(0, path)
+        QSettings("bjmvictor", "OpenSCR").setValue(
+            "recent_projects",
+            paths[:10],
+        )
+        self.update_recent_projects_menu()
+
+    def clear_recent_projects(self):
+        QSettings("bjmvictor", "OpenSCR").setValue("recent_projects", [])
+        self.update_recent_projects_menu()
+
+    def update_recent_projects_menu(self):
+        if self.recent_menu is None:
+            return
+        self.recent_menu.clear()
+        paths = self.get_recent_projects()
+        if not paths:
+            action = QAction("Nenhum projeto recente", self)
+            action.setEnabled(False)
+            self.recent_menu.addAction(action)
+            return
+        for path in paths:
+            action = QAction(Path(path).name, self)
+            action.setToolTip(path)
+            action.triggered.connect(
+                lambda checked=False, value=path: self.import_project(value)
+            )
+            self.recent_menu.addAction(action)
+        self.recent_menu.addSeparator()
+        clear_action = QAction("Limpar recentes", self)
+        clear_action.triggered.connect(self.clear_recent_projects)
+        self.recent_menu.addAction(clear_action)
+
     def export_project(self):
+        self.save_project_as()
+
+    def save_project(self):
+        if self.current_project_path:
+            self.write_config(self.current_project_path)
+            self.add_recent_project(self.current_project_path)
+        else:
+            self.save_project_as()
+
+    def save_project_as(self):
         filename, _ = QFileDialog.getSaveFileName(
             self,
-            "Exportar configurações",
+            "Salvar projeto",
             "screensaver.json",
-            "Projeto OpenSCR (*.json)",
-        )
-        if filename:
-            self.write_config(filename)
-
-    def import_project(self):
-        filename, _ = QFileDialog.getOpenFileName(
-            self,
-            "Importar configurações",
-            "",
             "Projeto OpenSCR (*.json)",
         )
         if not filename:
             return
+        if Path(filename).suffix.lower() != ".json":
+            filename += ".json"
+        self.write_config(filename)
+        self.current_project_path = str(Path(filename).resolve())
+        self.add_recent_project(self.current_project_path)
+        self.update_window_title()
+
+    def import_project(self, filename=None):
+        if filename is None:
+            filename, _ = QFileDialog.getOpenFileName(
+                self,
+                "Abrir projeto",
+                "",
+                "Projeto OpenSCR (*.json)",
+            )
+        if not filename:
+            return False
 
         try:
             with open(filename, "r", encoding="utf-8") as file:
@@ -1241,22 +1410,27 @@ class OpenSCRCreator(
             self.image_list.clear()
             self.refresh_image_list()
             self.apply_config(config)
+            self.current_project_path = str(Path(filename).resolve())
+            self.add_recent_project(self.current_project_path)
+            self.update_window_title()
+            return True
         except (OSError, json.JSONDecodeError, TypeError, ValueError) as exc:
             QMessageBox.critical(
                 self,
                 "OpenSCR",
                 f"Não foi possível importar o projeto.\n\n{exc}",
             )
+            return False
 
     def apply_config(self, config):
         self.display_time.setValue(config.get("display_seconds", 8))
         self.transition_time.setValue(config.get("transition_seconds", 1.5))
         self.set_combo_data(self.transition, config.get("transition", "random"))
         self.set_combo_data(self.image_fit, config.get("image_fit", "cover"))
-        self.text_edit.setPlainText(config.get("text", ""))
         self.text_enabled.setChecked(config.get("text_enabled", True))
         self.set_combo_data(self.text_position, config.get("text_position", "bottom_right"))
         self.text_size.setValue(config.get("text_size", 32))
+        self.set_formatted_text(config.get("text", ""))
         self.set_combo_data(
             self.image_order,
             config.get(
@@ -1298,7 +1472,15 @@ class OpenSCRCreator(
 
         configured_effects = config.get(
             "transition_effects",
-            ["fade", "gradient", "slide_left", "slide_right", "zoom"],
+            [
+                "fade",
+                "gradient",
+                "slide_left",
+                "slide_right",
+                "zoom",
+                "slide_up",
+                "slide_down",
+            ],
         )
         for index in range(self.effects_list.count()):
             item = self.effects_list.item(index)
@@ -1350,6 +1532,9 @@ class OpenSCRCreator(
             "OpenSCRPreview.scr"
         )
 
+        self.set_busy(True)
+        QApplication.processEvents()
+
 
         try:
             build_screensaver(
@@ -1367,7 +1552,7 @@ class OpenSCRCreator(
                     f"{exc}"
                 ),
             )
-
+            self.set_busy(False)
             return
 
 
@@ -1411,6 +1596,10 @@ class OpenSCRCreator(
             self.on_preview_process_error
         )
 
+        self.preview_process.readyReadStandardOutput.connect(
+            self.on_preview_output
+        )
+
 
         self.preview_process.finished.connect(
             self.on_preview_finished
@@ -1420,8 +1609,6 @@ class OpenSCRCreator(
         self.statusBar().showMessage(
             "Abrindo preview..."
         )
-        self.set_busy(True)
-
 
         self.preview_process.start()
 
@@ -1491,18 +1678,6 @@ class OpenSCRCreator(
             self.set_busy(False)
             return
 
-        log_path = (
-            Path(
-                os.environ.get(
-                    "LOCALAPPDATA",
-                    "",
-                )
-            )
-            / "OpenSCR"
-            / "logs"
-            / "screensaver.log"
-        )
-
         message = (
             "O preview foi encerrado "
             f"com código {exit_code}."
@@ -1512,12 +1687,6 @@ class OpenSCRCreator(
             message += (
                 "\n\nSaída do runtime:\n\n"
                 + self.preview_output[-4000:]
-            )
-
-        if log_path.exists():
-            message += (
-                "\n\nO log completo está em:\n"
-                f"{log_path}"
             )
 
         QMessageBox.critical(
@@ -1557,6 +1726,7 @@ class OpenSCRCreator(
             return
 
         self.set_busy(True)
+        QApplication.processEvents()
 
         self.build_button.setText(
             "Gerando..."
@@ -1597,8 +1767,8 @@ class OpenSCRCreator(
                 "Protetor de tela criado "
                 "com sucesso.\n\n"
                 f"{scr_path}\n\n"
-                "O arquivo .SCR é "
-                "autossuficiente."
+                "O arquivo .SCR foi gerado"
+                "e salvo."
             ),
         )
 
@@ -1644,6 +1814,20 @@ class OpenSCRCreator(
         self.setEnabled(not busy)
         self.preview_button.setEnabled(not busy)
         self.build_button.setEnabled(not busy)
+        self.loading_label.setVisible(busy)
+        if busy:
+            self.loading_index = 0
+            self.update_loading_indicator()
+            self.loading_timer.start(120)
+        else:
+            self.loading_timer.stop()
+            self.loading_label.clear()
+
+    def update_loading_indicator(self):
+        frames = ["|", "/", "-", "\\"]
+        frame = frames[self.loading_index % len(frames)]
+        self.loading_label.setText(f"{frame} Carregando...")
+        self.loading_index += 1
 
 def main():
     configure_windows_app_id()
@@ -1668,14 +1852,49 @@ def main():
         "assets/OpenSCR.ico"
     )
 
+    splash_path = resource_path(
+        "assets/splash.png"
+    )
+
     if icon_path.exists():
         app.setWindowIcon(
             QIcon(str(icon_path))
         )
 
+    splash = None
+    if splash_path.exists() and not getattr(sys, "frozen", False):
+        splash_pixmap = QPixmap(str(splash_path)).scaled(
+            600,
+            600,
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        splash = QSplashScreen(splash_pixmap)
+        splash.showMessage(
+            "Carregando OpenSCR...",
+            Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignHCenter,
+            Qt.GlobalColor.white,
+        )
+        splash.show()
+        app.processEvents()
+
     window = OpenSCRCreator()
 
     window.show()
+
+    if splash:
+        splash.finish(window)
+
+    if getattr(sys, "frozen", False):
+        def close_native_splash():
+            try:
+                splash_module = importlib.import_module("pyi_splash")
+                splash_module.close()
+            except (ImportError, AttributeError):
+                pass
+
+        app.processEvents()
+        QTimer.singleShot(150, close_native_splash)
 
     sys.exit(
         app.exec()

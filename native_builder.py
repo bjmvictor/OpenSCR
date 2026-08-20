@@ -62,7 +62,7 @@ RESOURCE_IMAGE_START = 1000
 # "OSCR" em little endian
 CONFIG_MAGIC = 0x5243534F
 
-CONFIG_VERSION = 2
+CONFIG_VERSION = 3
 
 
 # ============================================================
@@ -155,7 +155,10 @@ def build_text_config(
     font_size,
     color,
     position,
-    margin,
+    margin_top,
+    margin_right,
+    margin_bottom,
+    margin_left,
 
     shadow_enabled=True,
     shadow_color="#000000",
@@ -174,7 +177,7 @@ def build_text_config(
     }
 
     return struct.pack(
-        "<7I2iI",
+        "<10I2iI",
 
         1 if enabled else 0,
 
@@ -188,7 +191,10 @@ def build_text_config(
             position
         ],
 
-        int(margin),
+        int(margin_top),
+        int(margin_right),
+        int(margin_bottom),
+        int(margin_left),
 
         1 if shadow_enabled else 0,
 
@@ -330,6 +336,23 @@ def inject_resources(
 # Config
 # ============================================================
 
+def build_transition_mask(effects, random_enabled):
+    effect_bits = {
+        "fade": 1 << 0,
+        "slide_left": 1 << 1,
+        "slide_right": 1 << 2,
+        "zoom": 1 << 3,
+        "gradient": 1 << 4,
+        "slide_up": 1 << 5,
+        "slide_down": 1 << 6,
+    }
+    if effects is None:
+        return 0x7F if random_enabled else 0
+    mask = 0
+    for effect in effects:
+        mask |= effect_bits.get(effect, 0)
+    return mask
+
 def build_config(
     image_count,
     display_seconds,
@@ -337,6 +360,8 @@ def build_config(
     transition,
     fit,
     image_order,
+    transition_mask,
+    background_color,
 ):
     transition_modes = {
         "fade": 0,
@@ -344,7 +369,9 @@ def build_config(
         "slide_right": 2,
         "zoom": 3,
         "gradient": 4,
-        "random": 5,
+        "slide_up": 5,
+        "slide_down": 6,
+        "random": 7,
     }
 
     fit_modes = {
@@ -387,7 +414,7 @@ def build_config(
     )
 
     return struct.pack(
-        "<8I",
+        "<10I",
 
         CONFIG_MAGIC,
         CONFIG_VERSION,
@@ -400,6 +427,8 @@ def build_config(
         transition_mode,
         fit_mode,
         order_mode,
+        transition_mask,
+        parse_color(background_color),
     )
 
 # ============================================================
@@ -417,6 +446,9 @@ def build_native_screensaver(
     fit="cover",
 
     image_order="forward",
+    transition_effects=None,
+    transition_random=False,
+    background_color="#000000",
 
     text="",
     text_enabled=True,
@@ -425,7 +457,10 @@ def build_native_screensaver(
     text_color="#FFFFFF",
 
     text_position="bottom_right",
-    text_margin=50,
+    text_margin_top=50,
+    text_margin_right=50,
+    text_margin_bottom=50,
+    text_margin_left=50,
 
     text_shadow_enabled=True,
     text_shadow_color="#000000",
@@ -501,6 +536,11 @@ def build_native_screensaver(
         transition=transition,
         fit=fit,
         image_order=image_order,
+        transition_mask=build_transition_mask(
+            transition_effects,
+            transition_random or transition == "random",
+        ),
+        background_color=background_color,
     )
 
     text_config_data = (
@@ -517,7 +557,10 @@ def build_native_screensaver(
 
             position=text_position,
 
-            margin=text_margin,
+            margin_top=text_margin_top,
+            margin_right=text_margin_right,
+            margin_bottom=text_margin_bottom,
+            margin_left=text_margin_left,
 
             shadow_enabled=text_shadow_enabled,
             shadow_color=text_shadow_color,
@@ -784,7 +827,10 @@ def main():
 
         text_position=args.text_position,
 
-        text_margin=args.text_margin,
+        text_margin_top=args.text_margin,
+        text_margin_right=args.text_margin,
+        text_margin_bottom=args.text_margin,
+        text_margin_left=args.text_margin,
     )
 
 

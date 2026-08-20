@@ -31,95 +31,48 @@ constexpr DWORD INPUT_DELAY_MS = 1000;
 
 constexpr int MOUSE_EXIT_THRESHOLD = 15;
 
-
 constexpr int RESOURCE_CONFIG = 900;
-
 constexpr int RESOURCE_TEXT = 901;
-
 constexpr int RESOURCE_TEXT_CONFIG = 902;
-
 constexpr int RESOURCE_IMAGE_START = 1000;
 
-constexpr std::uint32_t CONFIG_MAGIC =
-    0x5243534F;
-
-constexpr std::uint32_t CONFIG_VERSION =
-    2;
-
-
-// ============================================================
-// Config
-// ============================================================
+constexpr std::uint32_t CONFIG_MAGIC = 0x5243534F;
+constexpr std::uint32_t CONFIG_VERSION = 3;
 
 struct RuntimeConfig
 {
-    std::uint32_t magic =
-        CONFIG_MAGIC;
-
-    std::uint32_t version =
-        CONFIG_VERSION;
-
-    std::uint32_t imageCount =
-        1;
-
-    std::uint32_t displayMs =
-        8000;
-
-    std::uint32_t transitionMs =
-        1500;
-
-    std::uint32_t transitionMode =
-        0;
-
-    std::uint32_t fitMode =
-        0;
-
-    std::uint32_t orderMode =
-        0;
+    std::uint32_t magic = CONFIG_MAGIC;
+    std::uint32_t version = CONFIG_VERSION;
+    std::uint32_t imageCount = 1;
+    std::uint32_t displayMs = 8000;
+    std::uint32_t transitionMs = 1500;
+    std::uint32_t transitionMode = 0;
+    std::uint32_t fitMode = 0;
+    std::uint32_t orderMode = 0;
+    std::uint32_t transitionMask = 0x1F;
+    std::uint32_t backgroundColor = 0xFF000000;
 };
 
-static_assert(
-    sizeof(RuntimeConfig)
-    ==
-    32
-);
-
-// ============================================================
-// Text config
-// ============================================================
+static_assert(sizeof(RuntimeConfig) == 40);
 
 struct TextConfig
 {
     std::uint32_t enabled = 0;
-
     std::uint32_t fontSize = 32;
-
-    std::uint32_t color =
-        0xFFFFFFFF;
-
+    std::uint32_t color = 0xFFFFFFFF;
     std::uint32_t position = 6;
-
-    std::uint32_t margin = 50;
-
-
+    std::uint32_t marginTop = 50;
+    std::uint32_t marginRight = 50;
+    std::uint32_t marginBottom = 50;
+    std::uint32_t marginLeft = 50;
     std::uint32_t shadowEnabled = 1;
-
-    std::uint32_t shadowColor =
-        0xFF000000;
-
+    std::uint32_t shadowColor = 0xFF000000;
     std::int32_t shadowOffsetX = 2;
-
     std::int32_t shadowOffsetY = 2;
-
     std::uint32_t shadowOpacity = 180;
 };
 
-
-static_assert(
-    sizeof(TextConfig)
-    ==
-    40
-);
+static_assert(sizeof(TextConfig) == 52);
 
 // ============================================================
 // Globals
@@ -164,16 +117,19 @@ std::vector<RECT>
 std::vector<std::size_t>
     g_imageOrder;
 
-std::size_t
-    g_sequencePosition = 0;
+std::vector<std::vector<std::size_t>>
+    g_monitorImageOrders;
 
-bool g_transitioning = false;
+struct MonitorState
+{
+    std::size_t sequencePosition = 0;
+    bool transitioning = false;
+    std::uint32_t activeTransitionMode = 0;
+    ULONGLONG slideStartedAt = 0;
+    ULONGLONG transitionStartedAt = 0;
+};
 
-std::uint32_t g_activeTransitionMode = 0;
-
-
-ULONGLONG g_slideStartedAt = 0;
-ULONGLONG g_transitionStartedAt = 0;
+std::vector<MonitorState> g_monitorStates;
 
 
 POINT g_initialCursor{};
@@ -272,7 +228,26 @@ void BuildImageOrder()
     }
 
 
-    g_sequencePosition = 0;
+    g_monitorImageOrders.assign(
+        g_monitors.size(),
+        g_imageOrder
+    );
+
+    if (g_config.orderMode == 2)
+    {
+        static std::mt19937 generator(
+            static_cast<std::uint32_t>(GetTickCount64())
+        );
+        for (std::vector<std::size_t>& order : g_monitorImageOrders)
+        {
+            std::shuffle(order.begin(), order.end(), generator);
+        }
+    }
+
+    g_monitorStates.assign(
+        g_monitors.size(),
+        MonitorState{}
+    );
 }
 
 
@@ -484,12 +459,13 @@ void LoadRuntimeConfig()
         2u
     );
 
-    g_config.transitionMode =
-    std::clamp(
+    g_config.transitionMode = std::clamp(
         g_config.transitionMode,
         0u,
-        5u
+        7u
     );
+
+    g_config.transitionMask &= 0x7Fu;
 }
 
 // ============================================================
@@ -542,12 +518,21 @@ void LoadTextResources()
             );
 
 
-        g_textConfig.margin =
+        g_textConfig.marginTop =
             std::clamp(
-                g_textConfig.margin,
+                g_textConfig.marginTop,
                 0u,
                 500u
             );
+
+        g_textConfig.marginRight =
+            std::clamp(g_textConfig.marginRight, 0u, 500u);
+
+        g_textConfig.marginBottom =
+            std::clamp(g_textConfig.marginBottom, 0u, 500u);
+
+        g_textConfig.marginLeft =
+            std::clamp(g_textConfig.marginLeft, 0u, 500u);
 
         g_textConfig.shadowEnabled =
             g_textConfig.shadowEnabled
@@ -1582,113 +1567,154 @@ void DrawTextInMonitor(
     ConfigureTextAlignment();
 
 
-    const float margin =
-        static_cast<float>(
-            g_textConfig.margin
-        );
-
-
     const D2D1_RECT_F textRect =
         D2D1::RectF(
 
             static_cast<float>(
                 monitor.left
             )
-            +
-            margin,
+            + static_cast<float>(g_textConfig.marginLeft),
 
             static_cast<float>(
                 monitor.top
             )
-            +
-            margin,
+            + static_cast<float>(g_textConfig.marginTop),
 
             static_cast<float>(
                 monitor.right
             )
-            -
-            margin,
+            - static_cast<float>(g_textConfig.marginRight),
 
             static_cast<float>(
                 monitor.bottom
             )
-            -
-            margin
+            - static_cast<float>(g_textConfig.marginBottom)
         );
 
 
-    // --------------------------------------------------------
-    // Shadow
-    // --------------------------------------------------------
-
-    if (
-        g_textConfig.shadowEnabled
-        &&
-        g_shadowBrush
-    )
+    auto drawText = [&](ID2D1SolidColorBrush* brush, float offsetX, float offsetY)
     {
-        const float offsetX =
-            static_cast<float>(
-                g_textConfig.shadowOffsetX
+        std::wstring plain;
+        struct FormatRange
+        {
+            std::size_t start;
+            std::size_t length;
+            bool bold;
+            bool italic;
+            float size;
+        };
+        std::vector<FormatRange> ranges;
+        bool bold = false;
+        bool italic = false;
+        float size = static_cast<float>(g_textConfig.fontSize);
+        std::size_t rangeStart = 0;
+        bool rangeBold = bold;
+        bool rangeItalic = italic;
+        float rangeSize = size;
+
+        auto flush = [&]()
+        {
+            if (rangeStart < plain.size())
+            {
+                ranges.push_back({
+                    rangeStart,
+                    plain.size() - rangeStart,
+                    rangeBold,
+                    rangeItalic,
+                    rangeSize,
+                });
+            }
+            rangeStart = plain.size();
+            rangeBold = bold;
+            rangeItalic = italic;
+            rangeSize = size;
+        };
+
+        auto startFormattedRange = [&]()
+        {
+            rangeStart = plain.size();
+            rangeBold = bold;
+            rangeItalic = italic;
+            rangeSize = size;
+        };
+
+        for (std::size_t index = 0; index < text.size();)
+        {
+            if (text[index] == L'[')
+            {
+                const std::size_t end = text.find(L']', index);
+                if (end != std::wstring::npos)
+                {
+                    const std::wstring tag = text.substr(index, end - index + 1);
+                    bool recognized = true;
+                    if (tag == L"[b]") bold = true;
+                    else if (tag == L"[/b]") bold = false;
+                    else if (tag == L"[i]") italic = true;
+                    else if (tag == L"[/i]") italic = false;
+                    else if (tag.rfind(L"[size=", 0) == 0 && tag.back() == L']')
+                    {
+                        try { size = std::stof(tag.substr(6, tag.size() - 7)); }
+                        catch (...) { recognized = false; }
+                    }
+                    else if (tag == L"[/size]") size = static_cast<float>(g_textConfig.fontSize);
+                    else recognized = false;
+                    if (recognized)
+                    {
+                        flush();
+                        startFormattedRange();
+                        index = end + 1;
+                        continue;
+                    }
+                }
+            }
+            plain.push_back(text[index++]);
+        }
+        flush();
+
+        ComPtr<IDWriteTextLayout> layout;
+        const float width = textRect.right - textRect.left;
+        const float height = textRect.bottom - textRect.top;
+        if (FAILED(g_writeFactory->CreateTextLayout(
+            plain.c_str(), static_cast<UINT32>(plain.size()), g_textFormat.Get(),
+            width, height, layout.GetAddressOf())) )
+        {
+            return;
+        }
+
+        for (const FormatRange& range : ranges)
+        {
+            const DWRITE_TEXT_RANGE textRange{
+                static_cast<UINT32>(range.start),
+                static_cast<UINT32>(range.length),
+            };
+            layout->SetFontWeight(
+                range.bold ? DWRITE_FONT_WEIGHT_BOLD : DWRITE_FONT_WEIGHT_NORMAL,
+                textRange
             );
-
-
-        const float offsetY =
-            static_cast<float>(
-                g_textConfig.shadowOffsetY
+            layout->SetFontStyle(
+                range.italic ? DWRITE_FONT_STYLE_ITALIC : DWRITE_FONT_STYLE_NORMAL,
+                textRange
             );
+            layout->SetFontSize(range.size, textRange);
+        }
 
-
-        const D2D1_RECT_F shadowRect =
-            D2D1::RectF(
-                textRect.left + offsetX,
-                textRect.top + offsetY,
-
-                textRect.right + offsetX,
-                textRect.bottom + offsetY
-            );
-
-
-        g_renderTarget
-            ->DrawTextW(
-                text.c_str(),
-
-                static_cast<UINT32>(
-                    text.size()
-                ),
-
-                g_textFormat.Get(),
-
-                shadowRect,
-
-                g_shadowBrush.Get(),
-
-                D2D1_DRAW_TEXT_OPTIONS_CLIP
-            );
-    }
-
-
-    // --------------------------------------------------------
-    // Main text
-    // --------------------------------------------------------
-
-    g_renderTarget
-        ->DrawTextW(
-
-            text.c_str(),
-
-            static_cast<UINT32>(
-                text.size()
-            ),
-
-            g_textFormat.Get(),
-
-            textRect,
-
-            g_textBrush.Get(),
-
+        g_renderTarget->DrawTextLayout(
+            D2D1::Point2F(textRect.left + offsetX, textRect.top + offsetY),
+            layout.Get(),
+            brush,
             D2D1_DRAW_TEXT_OPTIONS_CLIP
         );
+    };
+
+    if (g_textConfig.shadowEnabled && g_shadowBrush)
+    {
+        drawText(
+            g_shadowBrush.Get(),
+            static_cast<float>(g_textConfig.shadowOffsetX),
+            static_cast<float>(g_textConfig.shadowOffsetY)
+        );
+    }
+    drawText(g_textBrush.Get(), 0.0f, 0.0f);
 }
 
 
@@ -1741,17 +1767,12 @@ void LoadAllBitmaps()
 
     BuildImageOrder();
 
-    g_transitioning =
-        false;
-
-    g_slideStartedAt =
-        GetTickCount64();
-
-    g_transitioning =
-        false;
-
-    g_slideStartedAt =
-        GetTickCount64();
+    const ULONGLONG now = GetTickCount64();
+    for (MonitorState& state : g_monitorStates)
+    {
+        state = MonitorState{};
+        state.slideStartedAt = now;
+    }
 }
 
 std::size_t ImageIndexForMonitor(
@@ -1767,19 +1788,26 @@ std::size_t ImageIndexForMonitor(
     }
 
 
+    const std::size_t sequencePosition =
+        monitorIndex < g_monitorStates.size()
+        ? g_monitorStates[monitorIndex].sequencePosition
+        : 0;
+
+    const std::vector<std::size_t>& monitorOrder =
+        monitorIndex < g_monitorImageOrders.size()
+        ? g_monitorImageOrders[monitorIndex]
+        : g_imageOrder;
+
+    const std::size_t monitorOffset =
+        g_config.orderMode == 2 ? 0 : monitorIndex;
+
     const std::size_t position =
-        (
-            g_sequencePosition
-            +
-            monitorIndex
-            +
-            offset
-        )
+        (sequencePosition + monitorOffset + offset)
         %
-        g_imageOrder.size();
+        monitorOrder.size();
 
 
-    return g_imageOrder[
+    return monitorOrder[
         position
     ];
 }
@@ -1981,7 +2009,7 @@ std::uint32_t ResolveTransitionMode()
     if (
         g_config.transitionMode
         !=
-        5
+        7
     )
     {
         return g_config.transitionMode;
@@ -1995,17 +2023,26 @@ std::uint32_t ResolveTransitionMode()
     );
 
 
-    static std::uniform_int_distribution<
-        std::uint32_t
-    > distribution(
+    std::vector<std::uint32_t> available;
+    for (std::uint32_t mode = 0; mode < 7; ++mode)
+    {
+        if (g_config.transitionMask & (1u << mode))
+        {
+            available.push_back(mode);
+        }
+    }
+
+    if (available.empty())
+    {
+        return 6;
+    }
+
+    std::uniform_int_distribution<std::size_t> distribution(
         0,
-        4
+        available.size() - 1
     );
 
-
-    return distribution(
-        generator
-    );
+    return available[distribution(generator)];
 }
 
 
@@ -2162,7 +2199,8 @@ void DrawGradientTransition(
 void DrawTransitionInMonitor(
     const RECT& monitor,
     float progress,
-    std::size_t monitorIndex
+    std::size_t monitorIndex,
+    std::uint32_t transitionMode
 )
 {
     const std::size_t currentIndex =
@@ -2199,9 +2237,7 @@ void DrawTransitionInMonitor(
         );
 
 
-    switch (
-        g_activeTransitionMode
-    )
+    switch (transitionMode)
     {
         // Fade
         case 0:
@@ -2337,6 +2373,28 @@ void DrawTransitionInMonitor(
             break;
         }
 
+        // Slide up
+        case 5:
+        {
+            const float height = static_cast<float>(
+                monitor.bottom - monitor.top
+            );
+            DrawBitmapInMonitor(current, monitor, 1.0f, 0.0f, -height * progress);
+            DrawBitmapInMonitor(next, monitor, 1.0f, 0.0f, height * (1.0f - progress));
+            break;
+        }
+
+        // Slide down
+        case 6:
+        {
+            const float height = static_cast<float>(
+                monitor.bottom - monitor.top
+            );
+            DrawBitmapInMonitor(current, monitor, 1.0f, 0.0f, height * progress);
+            DrawBitmapInMonitor(next, monitor, 1.0f, 0.0f, -height * (1.0f - progress));
+            break;
+        }
+
 
         default:
         {
@@ -2378,8 +2436,8 @@ void Render(
 
     g_renderTarget
         ->Clear(
-            D2D1::ColorF(
-                D2D1::ColorF::Black
+            ColorFromArgb(
+                g_config.backgroundColor
             )
         );
 
@@ -2388,43 +2446,6 @@ void Render(
         !g_bitmaps.empty()
     )
     {
-        float progress =
-            0.0f;
-
-
-        if (
-            g_transitioning
-            &&
-            g_config.transitionMs
-            >
-            0
-        )
-        {
-            const ULONGLONG elapsed =
-                GetTickCount64()
-                -
-                g_transitionStartedAt;
-
-
-            progress =
-                static_cast<float>(
-                    elapsed
-                )
-                /
-                static_cast<float>(
-                    g_config.transitionMs
-                );
-
-
-            progress =
-                std::clamp(
-                    progress,
-                    0.0f,
-                    1.0f
-                );
-        }
-
-
         for (
             std::size_t monitorIndex = 0;
             monitorIndex < g_monitors.size();
@@ -2437,7 +2458,19 @@ void Render(
                 ];
 
 
-            if (!g_transitioning)
+            MonitorState& state = g_monitorStates[monitorIndex];
+            float progress = 0.0f;
+            if (state.transitioning && g_config.transitionMs > 0)
+            {
+                progress = std::clamp(
+                    static_cast<float>(GetTickCount64() - state.transitionStartedAt)
+                    / static_cast<float>(g_config.transitionMs),
+                    0.0f,
+                    1.0f
+                );
+            }
+
+            if (!state.transitioning)
             {
                 const std::size_t imageIndex =
                     ImageIndexForMonitor(
@@ -2462,7 +2495,8 @@ void Render(
                 DrawTransitionInMonitor(
                     monitor,
                     progress,
-                    monitorIndex
+                    monitorIndex,
+                    state.activeTransitionMode
                 );
             }
         }
@@ -2522,94 +2556,44 @@ void UpdateSlideshow(
     HWND hwnd
 )
 {
-    if (
-        g_bitmaps.size()
-        <=
-        1
-    )
+    if (g_bitmaps.size() <= 1 || g_monitorStates.empty())
     {
         return;
     }
 
+    const ULONGLONG now = GetTickCount64();
 
-    const ULONGLONG now =
-        GetTickCount64();
-
-
-    if (!g_transitioning)
+    for (MonitorState& state : g_monitorStates)
     {
-        const ULONGLONG elapsed =
-            now
-            -
-            g_slideStartedAt;
-
-
-        if (
-            elapsed
-            >=
-            g_config.displayMs
-        )
+        if (!state.transitioning)
         {
-            g_activeTransitionMode =
-                ResolveTransitionMode();
+            if (now - state.slideStartedAt < g_config.displayMs)
+            {
+                continue;
+            }
 
+            state.activeTransitionMode = ResolveTransitionMode();
+            if (state.activeTransitionMode == 6)
+            {
+                state.sequencePosition =
+                    (state.sequencePosition + 1) % g_imageOrder.size();
+                state.slideStartedAt = now;
+                continue;
+            }
 
-            g_transitioning =
-                true;
-
-
-            g_transitionStartedAt =
-                now;
-
-
-            InvalidateRect(
-                hwnd,
-                nullptr,
-                FALSE
-            );
+            state.transitioning = true;
+            state.transitionStartedAt = now;
         }
-
-
-        return;
+        else if (now - state.transitionStartedAt >= g_config.transitionMs)
+        {
+            state.sequencePosition =
+                (state.sequencePosition + 1) % g_imageOrder.size();
+            state.transitioning = false;
+            state.slideStartedAt = now;
+        }
     }
 
-
-    const ULONGLONG elapsed =
-        now
-        -
-        g_transitionStartedAt;
-
-
-    if (
-        elapsed
-        >=
-        g_config.transitionMs
-    )
-    {
-        g_sequencePosition =
-        (
-            g_sequencePosition
-            +
-            1
-        )
-        %
-        g_imageOrder.size();
-
-
-        g_transitioning =
-            false;
-
-
-        g_slideStartedAt =
-            now;
-    }
-
-
-    InvalidateRect(
-        hwnd,
-        nullptr,
-        FALSE
-    );
+    InvalidateRect(hwnd, nullptr, FALSE);
 }
 
 
@@ -2650,8 +2634,10 @@ LRESULT CALLBACK WindowProc(
                 GetTickCount64();
 
 
-            g_slideStartedAt =
-                g_startedAt;
+            for (MonitorState& state : g_monitorStates)
+            {
+                state.slideStartedAt = g_startedAt;
+            }
 
 
             GetCursorPos(

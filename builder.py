@@ -20,13 +20,8 @@ def build_screensaver(
 
 
     margins = config.get("text_margin", 50)
-    if isinstance(margins, dict):
-        margin = min(
-            int(margins.get(side, 50))
-            for side in ("top", "right", "bottom", "left")
-        )
-    else:
-        margin = int(margins)
+    if isinstance(margins, int):
+        margins = {side: margins for side in ("top", "right", "bottom", "left")}
 
     shadow = config.get(
         "text_shadow",
@@ -91,7 +86,14 @@ def build_screensaver(
             "bottom_right"
         ),
 
-        text_margin=margin,
+        text_margin_top=int(margins.get("top", 50)),
+        text_margin_right=int(margins.get("right", 50)),
+        text_margin_bottom=int(margins.get("bottom", 50)),
+        text_margin_left=int(margins.get("left", 50)),
+
+        transition_effects=config.get("transition_effects"),
+        transition_random=bool(config.get("transition_random", False)),
+        background_color=config.get("background_color", "#000000"),
 
         text_shadow_enabled=bool(
             shadow.get(
