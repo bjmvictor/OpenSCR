@@ -288,12 +288,6 @@ release/
 A pasta inteira deve ser mantida junta. O arquivo a executar é `OpenSCR.exe`.
 A versão portátil contém as dependências necessárias e não exige Python local.
 
-O arquivo `assets/OpenSCR.ico` inclui resoluções de 16 até 256 pixels. Se o
-Windows continuar exibindo um ícone borrado após substituir a release, ele
-provavelmente está usando o cache antigo do Explorer. Feche as janelas do
-Explorer e reinicie o computador, ou limpe o cache de ícones antes de testar o
-novo executável.
-
 Para gerar um único `.exe`, aceitando o tempo maior de inicialização da extração:
 
 ```powershell
@@ -303,8 +297,8 @@ python build_openscr.py
 
 Uma release funcional deve incluir o executável portátil gerado em `release/`
 e, se também for distribuir o criador de `.scr`, o runtime nativo presente em
-`resources/OpenSCRNativeRuntime.exe` durante o build. O usuário final não deve
-precisar executar CMake ou instalar compiladores.
+`resources/OpenSCRNativeRuntime.exe` durante o build. Assim a versão final não
+vai precisar executar CMake ou instalar compiladores.
 
 <p align="right">(<a href="#readme-top">voltar ao topo</a>)</p>
 
@@ -398,7 +392,7 @@ O OpenSCR está em evolução contínua.
 - [x] Zoom.
 - [x] Degradê.
 - [x] Transição aleatória.
-- [ ] Seleção dos efeitos utilizados no modo aleatório.
+- [x] Seleção dos efeitos utilizados no modo aleatório.
 - [ ] Ken Burns.
 - [ ] Dissolve.
 - [ ] Blur.
@@ -410,19 +404,19 @@ O OpenSCR está em evolução contínua.
 - [x] Variáveis dinâmicas.
 - [x] Cor e tamanho do texto.
 - [x] Posicionamento predefinido.
-- [ ] Múltiplos elementos de texto.
+- [x] Múltiplos elementos de texto.
+- [x] Sombra configuráveis (parcialmente completo).
 - [ ] Logos e imagens sobrepostas.
 - [ ] Editor visual por arrastar e soltar.
 - [ ] Fontes personalizadas.
-- [ ] Transparência e sombra configuráveis.
 
 ### Formatos e integração
 
+- [x] Exportação `.scr` em arquivo único.
 - [ ] Suporte a vídeos.
 - [ ] Templates.
 - [ ] Preview nativo `/p` do Windows.
 - [ ] Instalação do screensaver diretamente pelo OpenSCR.
-- [ ] Exportação `.scr` em arquivo único.
 - [ ] Instalador do OpenSCR.
 - [ ] Assinatura digital dos releases.
 - [ ] Builds automatizados com GitHub Actions.
