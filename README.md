@@ -47,6 +47,8 @@ Entre os principais objetivos estão:
 
 > O OpenSCR está em desenvolvimento ativo. Recursos, formatos de projeto e métodos de exportação podem sofrer alterações durante as versões iniciais.
 
+```Atenção: Apenas imagens (PNG, JPG, etc.) são suportadas. Não tem suporte para arquivos de vídeo no momento.```
+
 <p align="right">(<a href="#readme-top">voltar ao topo</a>)</p>
 
 ---
