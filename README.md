@@ -11,7 +11,7 @@
 
 <div align="center">
   <a href="https://github.com/bjmvictor/OpenSCR">
-    <img src="assets/splash.png" alt="OpenSCR" width="400" height="400">
+    <img src="assets/splash.png" alt="OpenSCR" width="400">
   </a>
 
   <h2 align="center">OpenSCR</h2>
