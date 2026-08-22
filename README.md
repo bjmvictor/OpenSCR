@@ -30,11 +30,32 @@
 
 ---
 
+## Baixar e utilizar
+
+Para **usar o OpenSCR**, basta baixar a **[release oficial mais recente](https://github.com/bjmvictor/OpenSCR/releases/latest)**, extrair o conteúdo e executar no Windows.
+
+### Download
+
+1. Acesse a página de **[Releases do OpenSCR](https://github.com/bjmvictor/OpenSCR/releases/latest)**.
+2. Baixe a versão disponibilizada para Windows.
+3. Extraia o conteúdo, caso a versão seja distribuída em arquivo compactado.
+4. Execute:
+
+```text
+OpenSCR.exe
+```
+
+> O código-fonte deste repositório é destinado a desenvolvimento, testes e contribuição. Para uso normal da aplicação, utilize uma release oficial.
+
+<p align="right">(<a href="#readme-top">voltar ao topo</a>)</p>
+
+---
+
 ## Sobre o projeto
 
-O **OpenSCR** é uma aplicação open source para criação de protetores de tela personalizados para Windows.
+O **OpenSCR** é uma aplicação open source para criação de protetores de tela personalizados para Windows, distribuída ao público através das releases oficiais do projeto.
 
-O projeto busca oferecer uma alternativa gratuita, moderna e simples às ferramentas proprietárias de criação de arquivos `.scr`, permitindo configurar todo o protetor de tela através de uma interface gráfica.
+O projeto busca oferecer uma alternativa gratuita, moderna e simples às ferramentas proprietárias de criação de arquivos `.scr`, permitindo configurar o protetor de tela através de uma interface gráfica.
 
 Entre os principais objetivos estão:
 
@@ -47,7 +68,7 @@ Entre os principais objetivos estão:
 
 > O OpenSCR está em desenvolvimento ativo. Recursos, formatos de projeto e métodos de exportação podem sofrer alterações durante as versões iniciais.
 
-```Atenção: Apenas imagens (PNG, JPG, etc.) são suportadas. Não tem suporte para arquivos de vídeo no momento.```
+> **Atenção:** apenas imagens (PNG, JPG, etc.) são suportadas. Não há suporte para arquivos de vídeo no momento.
 
 <p align="right">(<a href="#readme-top">voltar ao topo</a>)</p>
 
@@ -58,26 +79,24 @@ Entre os principais objetivos estão:
 ### Slideshow
 
 - Seleção de múltiplas imagens.
+- Reordenação das imagens por arrastar e soltar.
+- Ordem normal, reversa ou aleatória.
 - Controle do tempo de exibição.
 - Ajuste da imagem para preencher ou conter na tela.
 - Suporte a múltiplos monitores.
-- Fundo configurável.
 
 ### Transições
 
 - Fade.
 - Degradê.
-- Slide para esquerda.
-- Slide para direita.
-- Slide para cima.
-- Slide para baixo.
+- Slide.
 - Zoom.
-- Seleção aleatória de efeitos.
+- Transição aleatória.
 - Controle independente da duração da transição.
 
 ### Textos dinâmicos
 
-O OpenSCR permite adicionar textos sobre o protetor de tela utilizando conteúdo personalizado e variáveis que são atualizadas durante a execução.
+O OpenSCR permite adicionar texto sobre o protetor de tela utilizando conteúdo personalizado e variáveis atualizadas durante a execução.
 
 Exemplo:
 
@@ -104,7 +123,6 @@ Entre as variáveis disponíveis estão:
 
 {computer}
 {user}
-{os}
 ```
 
 Também é possível configurar:
@@ -113,37 +131,26 @@ Também é possível configurar:
 - tamanho;
 - cor;
 - margem;
+- sombra;
 - exibição ou ocultação do texto.
-
-Na caixa de texto, selecione um trecho e use os controles de formatação para
-aplicar negrito, itálico ou tamanho diferente. O formato é salvo no projeto e
-interpretado pelo runtime nativo com estas marcações:
-
-```text
-[b]negrito[/b]
-[i]itálico[/i]
-[size=48]texto maior[/size]
-```
 
 ### Preview
 
 As configurações podem ser visualizadas em tela cheia antes da exportação.
 
-O preview reproduz as imagens, textos, variáveis e transições configuradas no projeto.
+O preview reproduz imagens, textos, variáveis e transições configuradas no projeto.
 
 ### Exportação
 
 O OpenSCR gera protetores de tela executáveis pelo Windows.
 
-Na arquitetura atual, uma exportação utiliza:
+Exemplo:
 
 ```text
 MeuProtetor.scr
 ```
 
-O arquivo `.scr` é autocontido: o runtime, a configuração e as imagens são
-embutidos como recursos no próprio executável. Nenhuma pasta `.data` ou arquivo
-adicional precisa acompanhar a exportação.
+O arquivo `.scr` é autocontido: o runtime, a configuração e as imagens são embutidos como recursos no próprio executável. Nenhuma pasta `.data` ou arquivo adicional precisa acompanhar a exportação.
 
 <p align="right">(<a href="#readme-top">voltar ao topo</a>)</p>
 
@@ -158,36 +165,42 @@ O OpenSCR é desenvolvido principalmente com:
 [![PyInstaller][PyInstaller]][PyInstaller-url]
 [![Windows][WindowsTech]][WindowsTech-url]
 
-- **Python** — aplicação, configuração e engine.
-- **PySide6 / Qt** — interface gráfica e renderização.
-- **PyInstaller** — criação dos executáveis distribuíveis.
+- **Python** — editor, configuração e processo de geração dos screensavers.
+- **PySide6 / Qt** — interface gráfica do editor.
+- **C++ / Win32** — runtime nativo dos arquivos `.scr`.
+- **Direct2D / DirectWrite / WIC** — renderização de imagens e textos no runtime.
+- **PyInstaller** — empacotamento do OpenSCR para distribuição.
 - **Windows Screen Saver API** — integração com o formato `.scr`.
 
 <p align="right">(<a href="#readme-top">voltar ao topo</a>)</p>
 
 ---
 
-## Primeiros passos
+## Desenvolvimento
 
 ### Pré-requisitos
 
+As instruções desta seção são destinadas a quem deseja **desenvolver, modificar, testar ou contribuir com o código-fonte do OpenSCR**.
+
+Para apenas utilizar a aplicação, baixe uma [release oficial](https://github.com/bjmvictor/OpenSCR/releases/latest).
+
 Para executar o projeto em ambiente de desenvolvimento:
 
-- Python 3
-- Git
-- Windows >= 10
+- Python 3;
+- Git;
+- Windows 10 ou superior.
 
-Para executar somente uma release já gerada, o usuário final não precisa de
-Python, CMake ou Visual Studio. Essas ferramentas são necessárias apenas para
-desenvolver e recompilar o runtime nativo.
+O usuário final **não precisa** de Python, CMake, Visual Studio ou das demais ferramentas descritas abaixo. Elas são necessárias somente para desenvolvimento e recompilação de componentes do projeto.
 
-Para gerar uma release a partir do código-fonte, instale também:
+Para recompilar o runtime nativo ou gerar novas builds a partir do código-fonte, instale também:
 
 - CMake 3.24 ou superior;
 - Visual Studio 2022 Build Tools com o workload de C++ para desktop e Windows SDK;
 - ferramentas `cmake` e `msbuild` disponíveis no terminal.
 
-### Instalação
+### Executando o código-fonte
+
+> Esta não é a forma recomendada para usuários finais. Use este procedimento apenas para desenvolvimento, testes ou contribuição com o projeto.
 
 1. Clone o repositório:
 
@@ -237,7 +250,11 @@ python creator.py
 
 ---
 
-## Build
+## Build para desenvolvimento
+
+As etapas abaixo são destinadas a mantenedores e desenvolvedores que precisam recompilar o runtime ou gerar uma nova distribuição do OpenSCR.
+
+Para uso normal da aplicação, utilize a [release oficial mais recente](https://github.com/bjmvictor/OpenSCR/releases/latest).
 
 ### Runtime nativo
 
@@ -249,56 +266,44 @@ Para compilá-lo:
 python build_native_runtime.py
 ```
 
-Serão gerados:
+Será gerado:
 
 ```text
 resources/
 └── OpenSCRNativeRuntime.exe
 ```
 
-O executável nativo é usado como base para o preview e para os protetores
-exportados. O builder injeta nele a configuração e as imagens e grava um único
-arquivo `.scr` autocontido, mantendo o ícone do OpenSCR.
+O executável nativo é usado como base para o preview e para os protetores exportados. O builder injeta nele a configuração e as imagens e grava um único arquivo `.scr` autocontido.
 
-O runtime precisa ser recompilado sempre que `native/runtime/src/main.cpp` ou o
-formato binário de `RuntimeConfig`/`TextConfig` mudar:
-
-```powershell
-python build_native_runtime.py
-```
+O runtime deve ser recompilado quando houver alterações no código nativo ou no formato de configuração utilizado entre o editor e o runtime.
 
 ### Versão portátil
 
-Depois de compilar o runtime nativo, a versão portátil padrão usa o modo
-`onedir`, que inicia rapidamente porque não extrai dezenas de MB a cada abertura:
+Depois de compilar o runtime nativo, gere a versão portátil com:
 
 ```powershell
 python build_openscr.py
 ```
 
-O executável será criado em:
+A saída é criada no diretório:
 
 ```text
 release/
-└── OpenSCR-2.0.2-Portable/
-  ├── OpenSCR.exe
-  └── _internal/
+└── OpenSCR-<versão>-Portable/
+    ├── OpenSCR.exe
+    └── _internal/
 ```
 
 A pasta inteira deve ser mantida junta. O arquivo a executar é `OpenSCR.exe`.
-A versão portátil contém as dependências necessárias e não exige Python local.
 
-Para gerar um único `.exe`, aceitando o tempo maior de inicialização da extração:
+A versão portátil contém as dependências necessárias e não exige Python instalado na máquina do usuário.
+
+Para gerar um único `.exe`, aceitando um tempo maior de inicialização devido à extração:
 
 ```powershell
 $env:OPENSCR_ONEFILE = "1"
 python build_openscr.py
 ```
-
-Uma release funcional deve incluir o executável portátil gerado em `release/`
-e, se também for distribuir o criador de `.scr`, o runtime nativo presente em
-`resources/OpenSCRNativeRuntime.exe` durante o build. Assim a versão final não
-vai precisar executar CMake ou instalar compiladores.
 
 <p align="right">(<a href="#readme-top">voltar ao topo</a>)</p>
 
@@ -309,15 +314,12 @@ vai precisar executar CMake ou instalar compiladores.
 ```text
 OpenSCR/
 ├── assets/
-│   ├── OpenSCR.ico
-│   └── logo.png
-│
+├── installer/
+├── native/
+│   └── runtime/
+│       └── src/
 ├── resources/
-│   └── OpenSCRNativeRuntime.exe
-│
 ├── runtime/
-│   ├── __init__.py
-│   └── variables.py
 │
 ├── builder.py
 ├── native_builder.py
@@ -325,6 +327,8 @@ OpenSCR/
 ├── build_worker.py
 ├── build_openscr.py
 ├── creator.py
+├── openscr_variables.py
+├── config.json
 ├── requirements.txt
 ├── LICENSE
 └── README.md
@@ -336,35 +340,13 @@ Responsável pela interface gráfica, edição das configurações e preview.
 
 ### Runtime nativo
 
-Engine responsável por executar o protetor de tela.
+Engine em C++ responsável por executar o protetor de tela e renderizar imagens, textos e transições.
 
 ### Builder
 
-Prepara o arquivo `.scr`, configuração e recursos necessários para a exportação.
+Prepara o arquivo `.scr` e incorpora a configuração e os recursos necessários para a exportação.
 
 Essa separação mantém o editor independente do runtime utilizado pelos protetores gerados.
-
-<p align="right">(<a href="#readme-top">voltar ao topo</a>)</p>
-
----
-
-## Segurança e antivírus
-
-Arquivos `.scr` são executáveis do Windows e podem receber tratamento mais rigoroso de soluções de segurança.
-
-Executáveis gerados durante o desenvolvimento também podem eventualmente produzir falsos positivos em antivírus.
-
-O projeto busca reduzir esse comportamento através de builds transparentes e código-fonte público.
-
-Não é recomendado desativar permanentemente o antivírus para utilizar o OpenSCR.
-
-Caso uma versão oficial seja detectada incorretamente, recomenda-se reportar o arquivo como falso positivo ao fornecedor da solução de segurança.
-
-O formato single-file reduz a necessidade de arquivos auxiliares e evita a
-estrutura antiga `.scr` + `.data`, mas não garante ausência de falsos positivos.
-Uma release pública deve ser assinada digitalmente e distribuída por um canal
-confiável; assinatura, reputação do arquivo e submissão aos fornecedores de
-antivírus são importantes para reduzir alertas.
 
 <p align="right">(<a href="#readme-top">voltar ao topo</a>)</p>
 
@@ -392,7 +374,7 @@ O OpenSCR está em evolução contínua.
 - [x] Zoom.
 - [x] Degradê.
 - [x] Transição aleatória.
-- [x] Seleção dos efeitos utilizados no modo aleatório.
+- [ ] Seleção dos efeitos utilizados no modo aleatório.
 - [ ] Ken Burns.
 - [ ] Dissolve.
 - [ ] Blur.
@@ -404,8 +386,8 @@ O OpenSCR está em evolução contínua.
 - [x] Variáveis dinâmicas.
 - [x] Cor e tamanho do texto.
 - [x] Posicionamento predefinido.
-- [x] Múltiplos elementos de texto.
-- [x] Sombra configuráveis (parcialmente completo).
+- [x] Sombra configurável.
+- [ ] Múltiplos elementos de texto.
 - [ ] Logos e imagens sobrepostas.
 - [ ] Editor visual por arrastar e soltar.
 - [ ] Fontes personalizadas.
@@ -493,6 +475,8 @@ Projeto: [github.com/bjmvictor/OpenSCR](https://github.com/bjmvictor/OpenSCR)
 
 - Python
 - Qt for Python / PySide6
+- C++ / Win32
+- Direct2D / DirectWrite / WIC
 - PyInstaller
 - Microsoft Windows Screen Savers
 - Shields.io
