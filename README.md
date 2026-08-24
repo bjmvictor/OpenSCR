@@ -50,10 +50,9 @@ Download the **x64 Setup package** from the
 
 The same installer supports:
 
-- Windows Server 2016 build 14393 or newer;
 - Windows 10 x64;
 - Windows 11 x64;
-- newer x64 Windows Server versions.
+- Windows Server 2016 build 14393 or newer;
 
 Windows 32-bit is not supported.
 
