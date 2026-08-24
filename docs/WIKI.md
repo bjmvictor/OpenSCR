@@ -13,8 +13,8 @@ OpenSCR projects are UTF-8 JSON files. Use **File > Save As** to create one and
 
 Use the x64 Setup package from GitHub Releases. It supports Windows Server 2016
 build 14393, Windows 10, Windows 11, and newer x64 Windows Server versions. The
-installer deploys every application file and the required Microsoft Visual C++
-Runtime.
+installer deploys every application file and the required native runtime
+libraries.
 
 If a portable `onedir` package is used, extract it completely and keep all its
 files together. Windows 32-bit is not supported.

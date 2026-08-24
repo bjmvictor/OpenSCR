@@ -37,6 +37,21 @@ from openscr_variables import (
 
 APP_VERSION = "2.0.5"
 PROJECT_URL = "https://github.com/bjmvictor/OpenSCR"
+TEXT_PLACEHOLDER = (
+    "Digite seu texto aqui...\n\n"
+    "Exemplo:\n"
+    "Hoje é {weekday}, {date}\n"
+    "{time_seconds}"
+)
+
+
+def load_translations(language):
+    path = resource_path(f"locales/{language}.json")
+    try:
+        with open(path, "r", encoding="utf-8") as file:
+            return json.load(file)
+    except (OSError, json.JSONDecodeError):
+        return {}
 
 # -----------------------------------------------------
 # ASSETS / APPID
@@ -275,8 +290,66 @@ class OpenSCRCreator(
         theme = theme if theme in ("system", "light", "dark") else "system"
         styles = {
             "system": "",
-            "light": "QWidget { background: #f7f7f8; color: #202124; } QTextEdit, QListWidget, QComboBox, QSpinBox, QDoubleSpinBox { background: white; color: #202124; }",
-            "dark": "QWidget { background: #202124; color: #f1f3f4; } QTextEdit, QListWidget, QComboBox, QSpinBox, QDoubleSpinBox { background: #303134; color: #f1f3f4; } QPushButton { background: #3c4043; padding: 5px; }",
+            "light": """
+                QWidget { background: #f7f7f8; color: #202124; }
+                QTextEdit, QListWidget, QComboBox, QSpinBox, QDoubleSpinBox {
+                    background: #ffffff; color: #202124;
+                    border: 1px solid #c7c9cc; border-radius: 4px;
+                }
+                QPushButton {
+                    background: #ffffff; color: #202124;
+                    border: 1px solid #c7c9cc; border-radius: 5px;
+                    padding: 5px 10px;
+                }
+                QPushButton:hover {
+                    background: #e8f0fe; color: #174ea6;
+                    border-color: #5f87d8;
+                }
+                QPushButton:pressed, QPushButton:checked {
+                    background: #d2e3fc; color: #174ea6;
+                    border-color: #3f6fbd;
+                }
+                QPushButton:focus { border: 2px solid #5f87d8; }
+                QPushButton:disabled {
+                    background: #eeeeef; color: #9aa0a6;
+                    border-color: #dadce0;
+                }
+                QComboBox:hover, QSpinBox:hover, QDoubleSpinBox:hover,
+                QTextEdit:hover, QListWidget:hover { border-color: #5f87d8; }
+                QListWidget::item:hover { background: #e8f0fe; }
+                QListWidget::item:selected { background: #d2e3fc; color: #174ea6; }
+                QMenuBar::item:selected, QMenu::item:selected { background: #e8f0fe; }
+            """,
+            "dark": """
+                QWidget { background: #202124; color: #f1f3f4; }
+                QTextEdit, QListWidget, QComboBox, QSpinBox, QDoubleSpinBox {
+                    background: #303134; color: #f1f3f4;
+                    border: 1px solid #5f6368; border-radius: 4px;
+                }
+                QPushButton {
+                    background: #3c4043; color: #f1f3f4;
+                    border: 1px solid #5f6368; border-radius: 5px;
+                    padding: 5px 10px;
+                }
+                QPushButton:hover {
+                    background: #4c5f7a; color: #ffffff;
+                    border-color: #8ab4f8;
+                }
+                QPushButton:pressed, QPushButton:checked {
+                    background: #314968; color: #aecbfa;
+                    border-color: #aecbfa;
+                }
+                QPushButton:focus { border: 2px solid #8ab4f8; }
+                QPushButton:disabled {
+                    background: #292a2d; color: #70757a;
+                    border-color: #3c4043;
+                }
+                QComboBox:hover, QSpinBox:hover, QDoubleSpinBox:hover,
+                QTextEdit:hover, QListWidget:hover { border-color: #8ab4f8; }
+                QListWidget::item:hover { background: #3c4b63; }
+                QListWidget::item:selected { background: #314968; color: #ffffff; }
+                QMenuBar::item:selected, QMenu::item:selected { background: #3c4b63; }
+            """,
         }
         QApplication.instance().setStyleSheet(styles[theme])
         QSettings("bjmvictor", "OpenSCR").setValue("theme", theme)
@@ -287,14 +360,15 @@ class OpenSCRCreator(
         if persist:
             QSettings("bjmvictor", "OpenSCR").setValue("language", language)
         previous = getattr(self, "translations", {})
-        path = resource_path(f"locales/{language}.json")
-        with open(path, "r", encoding="utf-8") as file:
-            translations = json.load(file)
+        translations = load_translations(language)
         normalize = {value: key for key, value in previous.items()}
         self._apply_translation(normalize)
         self.translations = translations
         self.language = language
         self._apply_translation(translations)
+        if hasattr(self, "text_edit"):
+            self.text_edit.setPlaceholderText(self.translate(TEXT_PLACEHOLDER))
+        self.refresh_variables_list()
         self._install_qt_translator(language)
 
     def _apply_translation(self, lookup):
@@ -336,14 +410,14 @@ class OpenSCRCreator(
 
     def show_about(self):
         box = QMessageBox(self)
-        box.setWindowTitle("Sobre o OpenSCR")
+        box.setWindowTitle(self.translate("Sobre o OpenSCR"))
         box.setIconPixmap(self.windowIcon().pixmap(64, 64))
         box.setText(f"<h3>OpenSCR {APP_VERSION}</h3>")
         box.setInformativeText(
-            "Open Source Windows Screensaver Creator<br><br>"
-            "Desenvolvido por <b>Benjamin Victor</b><br>"
+            f"{self.translate('Open Source Windows Screensaver Creator')}<br><br>"
+            f"{self.translate('Desenvolvido por')} <b>Benjamin Victor</b><br>"
             f'<a href="{PROJECT_URL}">{PROJECT_URL}</a><br><br>'
-            "Licença MIT · Python, PySide2/Qt 5 e runtime nativo Win32"
+            f"{self.translate('Licença MIT · Python, PySide2/Qt 5 e runtime nativo Win32')}"
         )
         box.setTextFormat(Qt.RichText)
         (box.exec if hasattr(box, "exec") else box.exec_)()
@@ -678,12 +752,7 @@ class OpenSCRCreator(
             QSizePolicy.Expanding,
         )
 
-        self.text_edit.setPlaceholderText(
-            "Digite seu texto aqui...\n\n"
-            "Exemplo:\n"
-            "Hoje é {weekday}, {date}\n"
-            "{time_seconds}"
-        )
+        self.text_edit.setPlaceholderText(TEXT_PLACEHOLDER)
 
         self.text_edit.setPlainText(
             "{weekday}, {date}\n"
@@ -942,12 +1011,7 @@ class OpenSCRCreator(
             QListWidget()
         )
 
-        for variable, description in (
-            AVAILABLE_VARIABLES.items()
-        ):
-            self.variables_list.addItem(
-                f"{variable}  —  {description}"
-            )
+        self.refresh_variables_list()
 
         self.variables_list.itemDoubleClicked.connect(
             self.insert_variable
@@ -966,6 +1030,16 @@ class OpenSCRCreator(
         scroll.setWidget(content)
         scroll.setMinimumWidth(300)
         return scroll
+
+    def refresh_variables_list(self):
+        variables_list = getattr(self, "variables_list", None)
+        if variables_list is None:
+            return
+        variables_list.clear()
+        for variable, description in AVAILABLE_VARIABLES.items():
+            variables_list.addItem(
+                f"{variable}  —  {self.translate(description)}"
+            )
 
     def create_shadow_offset_layout(self):
         layout = QHBoxLayout()
@@ -1116,12 +1190,9 @@ class OpenSCRCreator(
     def add_images(self):
         files, _ = QFileDialog.getOpenFileNames(
             self,
-            "Adicionar imagens",
+            self.translate("Adicionar imagens"),
             "",
-            (
-                "Imagens "
-                "(*.jpg *.jpeg *.png *.bmp *.webp)"
-            ),
+            self.translate("Imagens (*.jpg *.jpeg *.png *.bmp *.webp)"),
         )
 
         for file in files:
@@ -1443,7 +1514,7 @@ class OpenSCRCreator(
         self.recent_menu.clear()
         paths = self.get_recent_projects()
         if not paths:
-            action = QAction("Nenhum projeto recente", self)
+            action = QAction(self.translate("Nenhum projeto recente"), self)
             action.setEnabled(False)
             self.recent_menu.addAction(action)
             return
@@ -1455,7 +1526,7 @@ class OpenSCRCreator(
             )
             self.recent_menu.addAction(action)
         self.recent_menu.addSeparator()
-        clear_action = QAction("Limpar recentes", self)
+        clear_action = QAction(self.translate("Limpar recentes"), self)
         clear_action.triggered.connect(self.clear_recent_projects)
         self.recent_menu.addAction(clear_action)
 
@@ -1470,16 +1541,16 @@ class OpenSCRCreator(
                 self.saved_project_state = self.project_state()
                 return True
             except OSError as exc:
-                QMessageBox.critical(self, "OpenSCR", f"Não foi possível salvar o projeto.\n\n{exc}")
+                QMessageBox.critical(self, "OpenSCR", f"{self.translate('Não foi possível salvar o projeto.')}\n\n{exc}")
                 return False
         return self.save_project_as()
 
     def save_project_as(self):
         filename, _ = QFileDialog.getSaveFileName(
             self,
-            "Salvar projeto",
+            self.translate("Salvar projeto"),
             "screensaver.json",
-            "Projeto OpenSCR (*.json)",
+            self.translate("Projeto OpenSCR (*.json)"),
         )
         if not filename:
             return False
@@ -1488,7 +1559,7 @@ class OpenSCRCreator(
         try:
             self.write_config(filename)
         except OSError as exc:
-            QMessageBox.critical(self, "OpenSCR", f"Não foi possível salvar o projeto.\n\n{exc}")
+            QMessageBox.critical(self, "OpenSCR", f"{self.translate('Não foi possível salvar o projeto.')}\n\n{exc}")
             return False
         self.current_project_path = str(Path(filename).resolve())
         self.add_recent_project(self.current_project_path)
@@ -1500,9 +1571,9 @@ class OpenSCRCreator(
         if filename is None:
             filename, _ = QFileDialog.getOpenFileName(
                 self,
-                "Abrir projeto",
+                self.translate("Abrir projeto"),
                 "",
-                "Projeto OpenSCR (*.json)",
+                self.translate("Projeto OpenSCR (*.json)"),
             )
         if not filename:
             return False
@@ -1528,7 +1599,7 @@ class OpenSCRCreator(
             QMessageBox.critical(
                 self,
                 "OpenSCR",
-                f"Não foi possível importar o projeto.\n\n{exc}",
+                f"{self.translate('Não foi possível importar o projeto.')}\n\n{exc}",
             )
             return False
 
@@ -1638,7 +1709,7 @@ class OpenSCRCreator(
             QMessageBox.warning(
                 self,
                 "OpenSCR",
-                "Adicione pelo menos uma imagem.",
+                self.translate("Adicione pelo menos uma imagem."),
             )
             return
 
@@ -1679,8 +1750,8 @@ class OpenSCRCreator(
                 self,
                 "OpenSCR",
                 (
-                    "Não foi possível gerar "
-                    "o preview.\n\n"
+                    self.translate("Não foi possível gerar o preview.")
+                    + "\n\n"
                     f"{exc}"
                 ),
             )
@@ -1742,7 +1813,7 @@ class OpenSCRCreator(
 
 
         self.statusBar().showMessage(
-            "Abrindo preview..."
+            self.translate("Abrindo preview...")
         )
 
         self.preview_process.start()
@@ -1792,16 +1863,16 @@ class OpenSCRCreator(
 
         QMessageBox.critical(
             self,
-            "OpenSCR - Erro no preview",
+            self.translate("OpenSCR - Erro no preview"),
             (
-                "Não foi possível iniciar "
-                "o preview.\n\n"
+                self.translate("Não foi possível iniciar o preview.")
+                + "\n\n"
                 f"{message}"
             ),
         )
 
         self.statusBar().showMessage(
-            "Falha ao abrir preview.",
+            self.translate("Falha ao abrir preview."),
             5000,
         )
         self.set_busy(False)
@@ -1816,7 +1887,7 @@ class OpenSCRCreator(
         # click, or mouse movement is a successful preview session.
         if exit_code == 0 or self.preview_started:
             self.statusBar().showMessage(
-                "Preview encerrado.",
+                self.translate("Preview encerrado."),
                 3000,
             )
             self.set_busy(False)
@@ -1824,24 +1895,25 @@ class OpenSCRCreator(
             return
 
         message = (
-            "O preview foi encerrado "
-            f"com código {exit_code}."
+            self.translate("O preview foi encerrado com código {code}.").format(
+                code=exit_code
+            )
         )
 
         if self.preview_output.strip():
             message += (
-                "\n\nSaída do runtime:\n\n"
+                f"\n\n{self.translate('Saída do runtime:')}\n\n"
                 + self.preview_output[-4000:]
             )
 
         QMessageBox.critical(
             self,
-            "OpenSCR - Falha no preview",
+            self.translate("OpenSCR - Falha no preview"),
             message,
         )
 
         self.statusBar().showMessage(
-            "Erro no preview.",
+            self.translate("Erro no preview."),
             5000,
         )
         self.set_busy(False)
@@ -1855,16 +1927,16 @@ class OpenSCRCreator(
             QMessageBox.warning(
                 self,
                 "OpenSCR",
-                "Adicione pelo menos uma imagem.",
+                self.translate("Adicione pelo menos uma imagem."),
             )
 
             return
 
         filename, _ = QFileDialog.getSaveFileName(
             self,
-            "Gerar protetor de tela",
+            self.translate("Gerar protetor de tela"),
             "MeuProtetor.scr",
-            "Screen Saver (*.scr)",
+            self.translate("Protetor de tela (*.scr)"),
         )
 
         if not filename:
@@ -1874,11 +1946,11 @@ class OpenSCRCreator(
         QApplication.processEvents()
 
         self.build_button.setText(
-            "Gerando..."
+            self.translate("Gerando...")
         )
 
         self.statusBar().showMessage(
-            "Gerando protetor de tela..."
+            self.translate("Gerando protetor de tela...")
         )
 
         self.build_thread = ScrBuildThread(
@@ -1909,19 +1981,17 @@ class OpenSCRCreator(
             self,
             "OpenSCR",
             (
-                "Protetor de tela criado "
-                "com sucesso.\n\n"
+                self.translate("Protetor de tela criado com sucesso.")
+                + "\n\n"
                 f"{scr_path}\n\n"
-                "O arquivo .SCR foi gerado"
-                "e salvo."
+                + self.translate("O arquivo .SCR foi gerado e salvo.")
             ),
         )
 
 
         self.statusBar().showMessage(
             (
-                "Protetor de tela criado "
-                "com sucesso."
+                self.translate("Protetor de tela criado com sucesso.")
             ),
             5000,
         )
@@ -1942,11 +2012,11 @@ class OpenSCRCreator(
         self.set_busy(False)
 
         self.build_button.setText(
-            "Gerar .SCR"
+            self.translate("Gerar .SCR")
         )
 
         self.statusBar().showMessage(
-            "Pronto",
+            self.translate("Pronto"),
             3000,
         )
 
@@ -1971,7 +2041,7 @@ class OpenSCRCreator(
     def update_loading_indicator(self):
         frames = ["|", "/", "-", "\\"]
         frame = frames[self.loading_index % len(frames)]
-        self.loading_label.setText(f"{frame} Carregando...")
+        self.loading_label.setText(f"{frame} {self.translate('Carregando...')}")
         self.loading_index += 1
 
 def main():
@@ -2017,8 +2087,12 @@ def main():
             Qt.SmoothTransformation,
         )
         splash = QSplashScreen(splash_pixmap)
+        language = QSettings("bjmvictor", "OpenSCR").value("language", "pt_BR")
+        splash_text = load_translations(language).get(
+            "Carregando OpenSCR...", "Carregando OpenSCR..."
+        )
         splash.showMessage(
-            "Carregando OpenSCR...",
+            splash_text,
             Qt.AlignBottom | Qt.AlignHCenter,
             Qt.white,
         )

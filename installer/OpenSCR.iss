@@ -4,9 +4,6 @@
 #ifndef SourceDir
   #error SourceDir must point to the OpenSCR onedir release
 #endif
-#ifndef VCRedist
-  #error VCRedist must point to vc_redist.x64.exe
-#endif
 #ifndef OutputDir
   #define OutputDir "..\release"
 #endif
@@ -51,7 +48,6 @@ Name: "chinesesimplified"; MessagesFile: "{#ChineseLanguage}"
 
 [Files]
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "{#VCRedist}"; DestDir: "{tmp}"; DestName: "vc_redist.x64.exe"; Flags: deleteafterinstall
 
 [Icons]
 Name: "{autoprograms}\OpenSCR"; Filename: "{app}\OpenSCR.exe"
@@ -61,5 +57,4 @@ Name: "{autodesktop}\OpenSCR"; Filename: "{app}\OpenSCR.exe"; Tasks: desktopicon
 Name: "desktopicon"; Description: "Criar um atalho na área de trabalho"; GroupDescription: "Atalhos adicionais:"
 
 [Run]
-Filename: "{tmp}\vc_redist.x64.exe"; Parameters: "/install /quiet /norestart"; StatusMsg: "Instalando componentes Microsoft Visual C++..."; Flags: waituntilterminated
 Filename: "{app}\OpenSCR.exe"; Description: "Abrir o OpenSCR"; Flags: nowait postinstall skipifsilent
