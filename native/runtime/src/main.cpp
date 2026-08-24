@@ -2642,14 +2642,6 @@ void UpdateSlideshow(
             }
 
             state.activeTransitionMode = ResolveTransitionMode();
-            if (state.activeTransitionMode == 6)
-            {
-                state.sequencePosition =
-                    (state.sequencePosition + 1) % g_imageOrder.size();
-                state.slideStartedAt = now;
-                continue;
-            }
-
             state.transitioning = true;
             state.transitionStartedAt = now;
         }
