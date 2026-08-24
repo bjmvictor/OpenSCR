@@ -462,10 +462,10 @@ void LoadRuntimeConfig()
     g_config.transitionMode = std::clamp(
         g_config.transitionMode,
         0u,
-        7u
+        11u
     );
 
-    g_config.transitionMask &= 0x7Fu;
+    g_config.transitionMask &= 0x7FFu;
 }
 
 // ============================================================
@@ -1482,6 +1482,7 @@ void ConfigureTextAlignment()
 
             break;
         }
+
     }
 
 
@@ -2009,7 +2010,7 @@ std::uint32_t ResolveTransitionMode()
     if (
         g_config.transitionMode
         !=
-        7
+        11
     )
     {
         return g_config.transitionMode;
@@ -2024,7 +2025,7 @@ std::uint32_t ResolveTransitionMode()
 
 
     std::vector<std::uint32_t> available;
-    for (std::uint32_t mode = 0; mode < 7; ++mode)
+    for (std::uint32_t mode = 0; mode < 11; ++mode)
     {
         if (g_config.transitionMask & (1u << mode))
         {
@@ -2395,6 +2396,74 @@ void DrawTransitionInMonitor(
             break;
         }
 
+        // Pixel blocks
+        case 7:
+        // Dissolve blocks
+        case 8:
+        {
+            DrawBitmapInMonitor(current, monitor, 1.0f);
+            const float cell = transitionMode == 7 ? 72.0f : 36.0f;
+            const float height = static_cast<float>(monitor.bottom - monitor.top);
+            const int columns = static_cast<int>(std::ceil(width / cell));
+            const int rows = static_cast<int>(std::ceil(height / cell));
+            for (int row = 0; row < rows; ++row)
+            {
+                for (int column = 0; column < columns; ++column)
+                {
+                    float threshold = static_cast<float>((row + column) % 9) / 9.0f;
+                    if (transitionMode == 8)
+                    {
+                        const std::uint32_t hash = static_cast<std::uint32_t>(column * 73856093u) ^ static_cast<std::uint32_t>(row * 19349663u);
+                        threshold = static_cast<float>(hash % 1000u) / 1000.0f;
+                    }
+                    if (progress < threshold) continue;
+                    D2D1_RECT_F clip = D2D1::RectF(
+                        static_cast<float>(monitor.left) + column * cell,
+                        static_cast<float>(monitor.top) + row * cell,
+                        std::min(static_cast<float>(monitor.right), static_cast<float>(monitor.left) + (column + 1) * cell),
+                        std::min(static_cast<float>(monitor.bottom), static_cast<float>(monitor.top) + (row + 1) * cell));
+                    g_renderTarget->PushAxisAlignedClip(clip, D2D1_ANTIALIAS_MODE_ALIASED);
+                    DrawBitmapInMonitor(next, monitor, 1.0f);
+                    g_renderTarget->PopAxisAlignedClip();
+                }
+            }
+            break;
+        }
+
+        // Horizontal glitch strips
+        case 9:
+        {
+            DrawBitmapInMonitor(current, monitor, 1.0f - progress);
+            constexpr float stripHeight = 32.0f;
+            const int strips = static_cast<int>(std::ceil((monitor.bottom - monitor.top) / stripHeight));
+            for (int strip = 0; strip < strips; ++strip)
+            {
+                const float top = static_cast<float>(monitor.top) + strip * stripHeight;
+                D2D1_RECT_F clip = D2D1::RectF(static_cast<float>(monitor.left), top, static_cast<float>(monitor.right), std::min(static_cast<float>(monitor.bottom), top + stripHeight));
+                g_renderTarget->PushAxisAlignedClip(clip, D2D1_ANTIALIAS_MODE_ALIASED);
+                DrawBitmapInMonitor(next, monitor, progress, ((strip % 3) - 1) * (1.0f - progress) * 42.0f);
+                g_renderTarget->PopAxisAlignedClip();
+            }
+            break;
+        }
+
+        // Venetian blinds
+        case 10:
+        {
+            DrawBitmapInMonitor(current, monitor, 1.0f);
+            constexpr float stripHeight = 48.0f;
+            const int strips = static_cast<int>(std::ceil((monitor.bottom - monitor.top) / stripHeight));
+            for (int strip = 0; strip < strips; ++strip)
+            {
+                const float top = static_cast<float>(monitor.top) + strip * stripHeight;
+                D2D1_RECT_F clip = D2D1::RectF(static_cast<float>(monitor.left), top, static_cast<float>(monitor.left) + width * progress, std::min(static_cast<float>(monitor.bottom), top + stripHeight));
+                g_renderTarget->PushAxisAlignedClip(clip, D2D1_ANTIALIAS_MODE_ALIASED);
+                DrawBitmapInMonitor(next, monitor, 1.0f);
+                g_renderTarget->PopAxisAlignedClip();
+            }
+            break;
+        }
+
 
         default:
         {
@@ -2612,6 +2681,14 @@ void ReleaseDeviceResources()
 
 
     g_renderTarget.Reset();
+
+    // Release every COM object before CoUninitialize. Leaving factories and
+    // text objects to global destruction can produce an access violation on
+    // older Windows versions after an otherwise normal screen-saver exit.
+    g_textFormat.Reset();
+    g_writeFactory.Reset();
+    g_wicFactory.Reset();
+    g_d2dFactory.Reset();
 }
 
 

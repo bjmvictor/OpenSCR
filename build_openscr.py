@@ -3,6 +3,7 @@ import os
 import shutil
 import subprocess
 import sys
+import platform
 from pathlib import Path
 
 
@@ -11,7 +12,7 @@ from pathlib import Path
 # ============================================================
 
 APP_NAME = "OpenSCR"
-APP_VERSION = "2.0.2"
+APP_VERSION = "2.0.5"
 
 
 ROOT_DIR = Path(
@@ -24,11 +25,15 @@ CREATOR_FILE = (
     / "creator.py"
 )
 
+RUNTIME_HOOK_FILE = ROOT_DIR / "pyinstaller_runtime_hook.py"
+
 
 ASSETS_DIR = (
     ROOT_DIR
     / "assets"
 )
+
+LOCALES_DIR = ROOT_DIR / "locales"
 
 
 ICON_FILE = (
@@ -90,10 +95,9 @@ def print_header():
 
 
 def validate_files():
-    required_files = [
-        CREATOR_FILE,
-        RUNTIME_NATIVE,
-    ]
+    required_files = [CREATOR_FILE, RUNTIME_HOOK_FILE]
+    if sys.platform == "win32":
+        required_files.append(RUNTIME_NATIVE)
 
     missing = [
         path
@@ -210,6 +214,8 @@ def build():
         "yes",
     )
 
+    import PySide2  # noqa: F401
+
     command = [
         sys.executable,
         "-m",
@@ -241,11 +247,31 @@ def build():
         # Garante que módulos locais possam ser localizados.
         "--paths",
         str(ROOT_DIR),
+        "--runtime-hook",
+        str(RUNTIME_HOOK_FILE),
+
+        # Include shiboken's native support binaries explicitly. PyInstaller's
+        # Qt hooks select the Qt DLLs/plugins used by the imported modules.
+        "--collect-binaries",
+        "shiboken2",
+        "--hidden-import",
+        "PySide2.QtCore",
+        "--hidden-import",
+        "PySide2.QtGui",
+        "--hidden-import",
+        "PySide2.QtWidgets",
+        "--exclude-module",
+        "numpy",
+        "--exclude-module",
+        "PIL",
     ]
 
     command.append("--onefile" if onefile else "--onedir")
 
-    if SPLASH_FILE.exists():
+    native_splash = os.environ.get("OPENSCR_NATIVE_SPLASH", "").lower() in (
+        "1", "true", "yes",
+    )
+    if SPLASH_FILE.exists() and native_splash:
         command.extend(
             [
                 "--splash",
@@ -284,11 +310,8 @@ def build():
     # Runtime
     # --------------------------------------------------------
 
-    add_data_argument(
-        command,
-        RUNTIME_NATIVE,
-        "resources",
-    )
+    if sys.platform == "win32":
+        add_data_argument(command, RUNTIME_NATIVE, "resources")
 
     # --------------------------------------------------------
     # Assets
@@ -300,6 +323,8 @@ def build():
             ASSETS_DIR,
             "assets",
         )
+    if LOCALES_DIR.exists():
+        add_data_argument(command, LOCALES_DIR, "locales")
 
     # --------------------------------------------------------
     # Entrypoint
@@ -333,13 +358,14 @@ def build():
     # Validate output
     # ========================================================
 
+    executable_name = APP_NAME + (".exe" if sys.platform == "win32" else "")
     generated_exe = (
         DIST_DIR
-        / f"{APP_NAME}.exe"
+        / executable_name
         if onefile
         else DIST_DIR
         / APP_NAME
-        / f"{APP_NAME}.exe"
+        / executable_name
     )
 
     if not generated_exe.exists():
@@ -355,20 +381,22 @@ def build():
     # ========================================================
 
     if onefile:
-        portable_name = (
-            f"{APP_NAME}-"
-            f"{APP_VERSION}-Portable.exe"
-        )
+        system_tag = "Windows" if sys.platform == "win32" else "Linux"
+        arch_tag = platform.machine().lower()
+        extension = ".exe" if sys.platform == "win32" else ""
+        portable_name = f"{APP_NAME}-{APP_VERSION}-{system_tag}-{arch_tag}-Portable{extension}"
         portable_file = RELEASE_DIR / portable_name
         if portable_file.exists():
             portable_file.unlink()
         shutil.copy2(generated_exe, portable_file)
     else:
-        portable_dir = RELEASE_DIR / f"{APP_NAME}-{APP_VERSION}-Portable"
+        system_tag = "Windows" if sys.platform == "win32" else "Linux"
+        arch_tag = platform.machine().lower()
+        portable_dir = RELEASE_DIR / f"{APP_NAME}-{APP_VERSION}-{system_tag}-{arch_tag}-Portable"
         if portable_dir.exists():
             shutil.rmtree(portable_dir, ignore_errors=True)
         shutil.copytree(DIST_DIR / APP_NAME, portable_dir)
-        portable_file = portable_dir / f"{APP_NAME}.exe"
+        portable_file = portable_dir / executable_name
 
     # ========================================================
     # Result

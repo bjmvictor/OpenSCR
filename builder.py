@@ -1,12 +1,19 @@
-from native_builder import (
-    build_native_screensaver,
-)
+import sys
 
 
 def build_screensaver(
     config,
     destination,
 ):
+    # native_builder binds Win32 APIs at import time. Import it only when an
+    # export is requested so the project editor can also start on Linux.
+    if sys.platform != "win32":
+        raise RuntimeError(
+            "A geração e a visualização de arquivos .scr estão disponíveis "
+            "somente no Windows. No Linux, o OpenSCR pode editar projetos."
+        )
+    from native_builder import build_native_screensaver
+
     images = config.get(
         "images",
         []

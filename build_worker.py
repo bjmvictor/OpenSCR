@@ -1,7 +1,4 @@
-from PySide6.QtCore import (
-    QThread,
-    Signal,
-)
+from PySide2.QtCore import QThread, Signal
 
 from builder import (
     build_screensaver,

@@ -345,9 +345,13 @@ def build_transition_mask(effects, random_enabled):
         "gradient": 1 << 4,
         "slide_up": 1 << 5,
         "slide_down": 1 << 6,
+        "pixel": 1 << 7,
+        "dissolve": 1 << 8,
+        "glitch": 1 << 9,
+        "blinds": 1 << 10,
     }
     if effects is None:
-        return 0x7F if random_enabled else 0
+        return 0x7FF if random_enabled else 0
     mask = 0
     for effect in effects:
         mask |= effect_bits.get(effect, 0)
@@ -371,7 +375,11 @@ def build_config(
         "gradient": 4,
         "slide_up": 5,
         "slide_down": 6,
-        "random": 7,
+        "pixel": 7,
+        "dissolve": 8,
+        "glitch": 9,
+        "blinds": 10,
+        "random": 11,
     }
 
     fit_modes = {
@@ -797,6 +805,10 @@ def main():
             "slide_right",
             "zoom",
             "gradient",
+            "pixel",
+            "dissolve",
+            "glitch",
+            "blinds",
             "random",
         ],
         default="random",
