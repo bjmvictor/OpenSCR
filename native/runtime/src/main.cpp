@@ -38,6 +38,7 @@ constexpr int RESOURCE_IMAGE_START = 1000;
 
 constexpr std::uint32_t CONFIG_MAGIC = 0x5243534F;
 constexpr std::uint32_t CONFIG_VERSION = 3;
+constexpr float RENDER_DPI = 96.0f;
 
 struct RuntimeConfig
 {
@@ -677,6 +678,87 @@ std::wstring FormatTwoDigits(
 }
 
 
+std::wstring FormatLocalizedDate(
+    const SYSTEMTIME& value,
+    DWORD flags = 0,
+    const wchar_t* format = nullptr
+)
+{
+    const int length = GetDateFormatEx(
+        LOCALE_NAME_USER_DEFAULT,
+        flags,
+        &value,
+        format,
+        nullptr,
+        0,
+        nullptr
+    );
+
+    if (length <= 1)
+    {
+        return {};
+    }
+
+    std::vector<wchar_t> buffer(
+        static_cast<std::size_t>(length)
+    );
+
+    if (!GetDateFormatEx(
+        LOCALE_NAME_USER_DEFAULT,
+        flags,
+        &value,
+        format,
+        buffer.data(),
+        length,
+        nullptr
+    ))
+    {
+        return {};
+    }
+
+    return buffer.data();
+}
+
+
+std::wstring FormatLocalizedTime(
+    const SYSTEMTIME& value,
+    DWORD flags
+)
+{
+    const int length = GetTimeFormatEx(
+        LOCALE_NAME_USER_DEFAULT,
+        flags,
+        &value,
+        nullptr,
+        nullptr,
+        0
+    );
+
+    if (length <= 1)
+    {
+        return {};
+    }
+
+    std::vector<wchar_t> buffer(
+        static_cast<std::size_t>(length)
+    );
+
+    if (!GetTimeFormatEx(
+        LOCALE_NAME_USER_DEFAULT,
+        flags,
+        &value,
+        nullptr,
+        buffer.data(),
+        length
+    ))
+    {
+        return {};
+    }
+
+    return buffer.data();
+}
+
+
 std::wstring RenderVariables(
     std::wstring text
 )
@@ -686,38 +768,6 @@ std::wstring RenderVariables(
     GetLocalTime(
         &now
     );
-
-
-    static const wchar_t*
-        weekdays[] =
-    {
-        L"Domingo",
-        L"Segunda-feira",
-        L"Terça-feira",
-        L"Quarta-feira",
-        L"Quinta-feira",
-        L"Sexta-feira",
-        L"Sábado"
-    };
-
-
-    static const wchar_t*
-        months[] =
-    {
-        L"",
-        L"Janeiro",
-        L"Fevereiro",
-        L"Março",
-        L"Abril",
-        L"Maio",
-        L"Junho",
-        L"Julho",
-        L"Agosto",
-        L"Setembro",
-        L"Outubro",
-        L"Novembro",
-        L"Dezembro"
-    };
 
 
     const std::wstring day =
@@ -735,40 +785,55 @@ std::wstring RenderVariables(
             now.wYear
         );
 
-    const std::wstring hour =
-        FormatTwoDigits(
-            now.wHour
-        );
+    std::wstring date = FormatLocalizedDate(
+        now,
+        DATE_SHORTDATE
+    );
 
-    const std::wstring minute =
-        FormatTwoDigits(
-            now.wMinute
-        );
+    std::wstring time = FormatLocalizedTime(
+        now,
+        TIME_NOSECONDS
+    );
 
-    const std::wstring second =
-        FormatTwoDigits(
-            now.wSecond
-        );
+    std::wstring timeSeconds = FormatLocalizedTime(
+        now,
+        0
+    );
 
+    std::wstring weekday = FormatLocalizedDate(
+        now,
+        0,
+        L"dddd"
+    );
 
-    const std::wstring date =
-        day
-        + L"/"
-        + month
-        + L"/"
-        + year;
+    std::wstring monthName = FormatLocalizedDate(
+        now,
+        0,
+        L"MMMM"
+    );
 
-
-    const std::wstring time =
-        hour
-        + L":"
-        + minute;
-
-
-    const std::wstring timeSeconds =
-        time
-        + L":"
-        + second;
+    // These fallbacks are only used if Windows cannot query the current user
+    // locale. Normally all values above come from Regional Settings.
+    if (date.empty())
+    {
+        date = year + L"-" + month + L"-" + day;
+    }
+    if (time.empty())
+    {
+        time = FormatTwoDigits(now.wHour) + L":" + FormatTwoDigits(now.wMinute);
+    }
+    if (timeSeconds.empty())
+    {
+        timeSeconds = time + L":" + FormatTwoDigits(now.wSecond);
+    }
+    if (weekday.empty())
+    {
+        weekday = std::to_wstring(now.wDayOfWeek);
+    }
+    if (monthName.empty())
+    {
+        monthName = month;
+    }
 
 
     text =
@@ -810,9 +875,7 @@ std::wstring RenderVariables(
         ReplaceAll(
             text,
             L"{weekday}",
-            weekdays[
-                now.wDayOfWeek
-            ]
+            weekday
         );
 
     text =
@@ -826,9 +889,7 @@ std::wstring RenderVariables(
         ReplaceAll(
             text,
             L"{month_name}",
-            months[
-                now.wMonth
-            ]
+            monthName
         );
 
     text =
@@ -1179,6 +1240,47 @@ void LoadMonitors()
 }
 
 
+void RefreshDisplayLayout(
+    HWND hwnd
+)
+{
+    g_virtualX = GetSystemMetrics(SM_XVIRTUALSCREEN);
+    g_virtualY = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    g_virtualWidth = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+    g_virtualHeight = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+
+    LoadMonitors();
+    BuildImageOrder();
+
+    SetWindowPos(
+        hwnd,
+        HWND_TOPMOST,
+        g_virtualX,
+        g_virtualY,
+        g_virtualWidth,
+        g_virtualHeight,
+        SWP_NOACTIVATE | SWP_SHOWWINDOW
+    );
+
+    if (g_renderTarget)
+    {
+        RECT client{};
+        if (GetClientRect(hwnd, &client))
+        {
+            g_renderTarget->SetDpi(RENDER_DPI, RENDER_DPI);
+            g_renderTarget->Resize(
+                D2D1::SizeU(
+                    static_cast<UINT>(client.right - client.left),
+                    static_cast<UINT>(client.bottom - client.top)
+                )
+            );
+        }
+    }
+
+    InvalidateRect(hwnd, nullptr, FALSE);
+}
+
+
 // ============================================================
 // Device resources
 // ============================================================
@@ -1263,6 +1365,15 @@ HRESULT CreateDeviceResources(
         {
             return hr;
         }
+
+        // Monitor rectangles and the HWND client area are expressed in
+        // physical pixels. Force Direct2D to use the same coordinate space;
+        // otherwise Windows display scaling (common on 4K TVs) converts our
+        // pixel coordinates as DIPs and crops the rendered image.
+        g_renderTarget->SetDpi(
+            RENDER_DPI,
+            RENDER_DPI
+        );
 
 
         LoadAllBitmaps();
@@ -1853,8 +1964,16 @@ void DrawBitmapInMonitor(
         );
 
 
-    const D2D1_SIZE_F imageSize =
-        bitmap->GetSize();
+    // Use actual bitmap pixels instead of its metadata-dependent DIP size.
+    // Camera and design files may declare 72, 96, or 300 DPI while having the
+    // same pixel dimensions; that metadata must not affect screen fitting.
+    const D2D1_SIZE_U imagePixelSize =
+        bitmap->GetPixelSize();
+
+    const D2D1_SIZE_F imageSize = D2D1::SizeF(
+        static_cast<float>(imagePixelSize.width),
+        static_cast<float>(imagePixelSize.height)
+    );
 
 
     if (
@@ -2789,6 +2908,14 @@ LRESULT CALLBACK WindowProc(
         }
 
 
+        case WM_DISPLAYCHANGE:
+        case WM_DPICHANGED:
+        {
+            RefreshDisplayLayout(hwnd);
+            return 0;
+        }
+
+
         case WM_PAINT:
         {
             PAINTSTRUCT paint{};
@@ -3034,9 +3161,14 @@ int WINAPI wWinMain(
     // Melhor comportamento com monitores
     // usando escalas DPI diferentes.
 
-    SetProcessDpiAwarenessContext(
+    if (!SetProcessDpiAwarenessContext(
         DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
-    );
+    ))
+    {
+        // The manifest normally establishes DPI awareness before entry. This
+        // fallback covers older supported Windows builds and unusual hosts.
+        SetProcessDPIAware();
+    }
 
 
     // --------------------------------------------------------

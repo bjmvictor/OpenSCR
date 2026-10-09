@@ -53,6 +53,13 @@ if(MSVC)
         "MultiThreaded$<$<CONFIG:Debug>:Debug>"
     )
 
+    target_link_options(
+        OpenSCRNativeRuntime
+        PRIVATE
+        "/MANIFEST:EMBED"
+        "/MANIFESTINPUT:${CMAKE_CURRENT_SOURCE_DIR}/src/OpenSCRNativeRuntime.manifest"
+    )
+
 endif()
 
 target_link_libraries(

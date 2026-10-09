@@ -37,7 +37,8 @@
 
 - Image slideshows with transitions effects.
 - Native multi-monitor preview and `.scr` export.
-- Formatted text with date, time, computer, and user variables.
+- Formatted text with date, time, computer, and user variables. Date, time,
+  weekday, and month output follows the Windows regional settings.
 - Configurable position, color, margins, and shadow.
 - Fade, gradient, zoom, slide, pixel, dissolve, glitch, and blinds transition effects.
 - Project files, recent files, light and dark themes, and save protection.
