@@ -38,6 +38,7 @@ constexpr int RESOURCE_IMAGE_START = 1000;
 
 constexpr std::uint32_t CONFIG_MAGIC = 0x5243534F;
 constexpr std::uint32_t CONFIG_VERSION = 3;
+constexpr float RENDER_DPI = 96.0f;
 
 struct RuntimeConfig
 {
@@ -1179,6 +1180,47 @@ void LoadMonitors()
 }
 
 
+void RefreshDisplayLayout(
+    HWND hwnd
+)
+{
+    g_virtualX = GetSystemMetrics(SM_XVIRTUALSCREEN);
+    g_virtualY = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    g_virtualWidth = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+    g_virtualHeight = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+
+    LoadMonitors();
+    BuildImageOrder();
+
+    SetWindowPos(
+        hwnd,
+        HWND_TOPMOST,
+        g_virtualX,
+        g_virtualY,
+        g_virtualWidth,
+        g_virtualHeight,
+        SWP_NOACTIVATE | SWP_SHOWWINDOW
+    );
+
+    if (g_renderTarget)
+    {
+        RECT client{};
+        if (GetClientRect(hwnd, &client))
+        {
+            g_renderTarget->SetDpi(RENDER_DPI, RENDER_DPI);
+            g_renderTarget->Resize(
+                D2D1::SizeU(
+                    static_cast<UINT>(client.right - client.left),
+                    static_cast<UINT>(client.bottom - client.top)
+                )
+            );
+        }
+    }
+
+    InvalidateRect(hwnd, nullptr, FALSE);
+}
+
+
 // ============================================================
 // Device resources
 // ============================================================
@@ -1263,6 +1305,15 @@ HRESULT CreateDeviceResources(
         {
             return hr;
         }
+
+        // Monitor rectangles and the HWND client area are expressed in
+        // physical pixels. Force Direct2D to use the same coordinate space;
+        // otherwise Windows display scaling (common on 4K TVs) converts our
+        // pixel coordinates as DIPs and crops the rendered image.
+        g_renderTarget->SetDpi(
+            RENDER_DPI,
+            RENDER_DPI
+        );
 
 
         LoadAllBitmaps();
@@ -1853,8 +1904,16 @@ void DrawBitmapInMonitor(
         );
 
 
-    const D2D1_SIZE_F imageSize =
-        bitmap->GetSize();
+    // Use actual bitmap pixels instead of its metadata-dependent DIP size.
+    // Camera and design files may declare 72, 96, or 300 DPI while having the
+    // same pixel dimensions; that metadata must not affect screen fitting.
+    const D2D1_SIZE_U imagePixelSize =
+        bitmap->GetPixelSize();
+
+    const D2D1_SIZE_F imageSize = D2D1::SizeF(
+        static_cast<float>(imagePixelSize.width),
+        static_cast<float>(imagePixelSize.height)
+    );
 
 
     if (
@@ -2789,6 +2848,14 @@ LRESULT CALLBACK WindowProc(
         }
 
 
+        case WM_DISPLAYCHANGE:
+        case WM_DPICHANGED:
+        {
+            RefreshDisplayLayout(hwnd);
+            return 0;
+        }
+
+
         case WM_PAINT:
         {
             PAINTSTRUCT paint{};
@@ -3034,9 +3101,14 @@ int WINAPI wWinMain(
     // Melhor comportamento com monitores
     // usando escalas DPI diferentes.
 
-    SetProcessDpiAwarenessContext(
+    if (!SetProcessDpiAwarenessContext(
         DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
-    );
+    ))
+    {
+        // The manifest normally establishes DPI awareness before entry. This
+        // fallback covers older supported Windows builds and unusual hosts.
+        SetProcessDPIAware();
+    }
 
 
     // --------------------------------------------------------
