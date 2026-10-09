@@ -678,6 +678,87 @@ std::wstring FormatTwoDigits(
 }
 
 
+std::wstring FormatLocalizedDate(
+    const SYSTEMTIME& value,
+    DWORD flags = 0,
+    const wchar_t* format = nullptr
+)
+{
+    const int length = GetDateFormatEx(
+        LOCALE_NAME_USER_DEFAULT,
+        flags,
+        &value,
+        format,
+        nullptr,
+        0,
+        nullptr
+    );
+
+    if (length <= 1)
+    {
+        return {};
+    }
+
+    std::vector<wchar_t> buffer(
+        static_cast<std::size_t>(length)
+    );
+
+    if (!GetDateFormatEx(
+        LOCALE_NAME_USER_DEFAULT,
+        flags,
+        &value,
+        format,
+        buffer.data(),
+        length,
+        nullptr
+    ))
+    {
+        return {};
+    }
+
+    return buffer.data();
+}
+
+
+std::wstring FormatLocalizedTime(
+    const SYSTEMTIME& value,
+    DWORD flags
+)
+{
+    const int length = GetTimeFormatEx(
+        LOCALE_NAME_USER_DEFAULT,
+        flags,
+        &value,
+        nullptr,
+        nullptr,
+        0
+    );
+
+    if (length <= 1)
+    {
+        return {};
+    }
+
+    std::vector<wchar_t> buffer(
+        static_cast<std::size_t>(length)
+    );
+
+    if (!GetTimeFormatEx(
+        LOCALE_NAME_USER_DEFAULT,
+        flags,
+        &value,
+        nullptr,
+        buffer.data(),
+        length
+    ))
+    {
+        return {};
+    }
+
+    return buffer.data();
+}
+
+
 std::wstring RenderVariables(
     std::wstring text
 )
@@ -687,38 +768,6 @@ std::wstring RenderVariables(
     GetLocalTime(
         &now
     );
-
-
-    static const wchar_t*
-        weekdays[] =
-    {
-        L"Domingo",
-        L"Segunda-feira",
-        L"Terça-feira",
-        L"Quarta-feira",
-        L"Quinta-feira",
-        L"Sexta-feira",
-        L"Sábado"
-    };
-
-
-    static const wchar_t*
-        months[] =
-    {
-        L"",
-        L"Janeiro",
-        L"Fevereiro",
-        L"Março",
-        L"Abril",
-        L"Maio",
-        L"Junho",
-        L"Julho",
-        L"Agosto",
-        L"Setembro",
-        L"Outubro",
-        L"Novembro",
-        L"Dezembro"
-    };
 
 
     const std::wstring day =
@@ -736,40 +785,55 @@ std::wstring RenderVariables(
             now.wYear
         );
 
-    const std::wstring hour =
-        FormatTwoDigits(
-            now.wHour
-        );
+    std::wstring date = FormatLocalizedDate(
+        now,
+        DATE_SHORTDATE
+    );
 
-    const std::wstring minute =
-        FormatTwoDigits(
-            now.wMinute
-        );
+    std::wstring time = FormatLocalizedTime(
+        now,
+        TIME_NOSECONDS
+    );
 
-    const std::wstring second =
-        FormatTwoDigits(
-            now.wSecond
-        );
+    std::wstring timeSeconds = FormatLocalizedTime(
+        now,
+        0
+    );
 
+    std::wstring weekday = FormatLocalizedDate(
+        now,
+        0,
+        L"dddd"
+    );
 
-    const std::wstring date =
-        day
-        + L"/"
-        + month
-        + L"/"
-        + year;
+    std::wstring monthName = FormatLocalizedDate(
+        now,
+        0,
+        L"MMMM"
+    );
 
-
-    const std::wstring time =
-        hour
-        + L":"
-        + minute;
-
-
-    const std::wstring timeSeconds =
-        time
-        + L":"
-        + second;
+    // These fallbacks are only used if Windows cannot query the current user
+    // locale. Normally all values above come from Regional Settings.
+    if (date.empty())
+    {
+        date = year + L"-" + month + L"-" + day;
+    }
+    if (time.empty())
+    {
+        time = FormatTwoDigits(now.wHour) + L":" + FormatTwoDigits(now.wMinute);
+    }
+    if (timeSeconds.empty())
+    {
+        timeSeconds = time + L":" + FormatTwoDigits(now.wSecond);
+    }
+    if (weekday.empty())
+    {
+        weekday = std::to_wstring(now.wDayOfWeek);
+    }
+    if (monthName.empty())
+    {
+        monthName = month;
+    }
 
 
     text =
@@ -811,9 +875,7 @@ std::wstring RenderVariables(
         ReplaceAll(
             text,
             L"{weekday}",
-            weekdays[
-                now.wDayOfWeek
-            ]
+            weekday
         );
 
     text =
@@ -827,9 +889,7 @@ std::wstring RenderVariables(
         ReplaceAll(
             text,
             L"{month_name}",
-            months[
-                now.wMonth
-            ]
+            monthName
         );
 
     text =

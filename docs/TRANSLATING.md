@@ -21,6 +21,11 @@ complete reference catalog.
    and both light and dark themes.
 7. Open a pull request describing the locale and translator name.
 
+The translated variable descriptions contain examples for the editor only.
+When a screen saver runs, `{date}`, `{time}`, `{time_seconds}`, `{date_time}`,
+`{weekday}`, and `{month_name}` follow the current user's Windows regional
+settings and are independent of the OpenSCR interface language.
+
 ## Standard dialog buttons
 
 OpenSCR also loads Qt's official `qtbase_<locale>.qm` catalog. It translates
