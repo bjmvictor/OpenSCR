@@ -48,4 +48,15 @@
   "Sup": "Top", "Dir": "Right", "Inf": "Bottom", "Esq": "Left", "Sombra:": "Shadow:",
   "Save":"Save", "Discard":"Discard", "Cancel":"Cancel",
   "O projeto foi alterado. Deseja salvar antes de fechar?": "The project has changed. Save before closing?"
+  "Data atual - 19/08/2026": "Current date - 08/19/2026",
+  "Hora atual - 15:55": "Current time - 15:55",
+  "Hora com segundos - 15:55:27": "Time with seconds - 15:55:27",
+  "Data e hora - 19/08/2026 15:55": "Date and time - 08/19/2026 15:55",
+  "Dia do mês - 19": "Day of month - 19",
+  "Dia da semana - Quarta-feira": "Day of week - Wednesday",
+  "Número do mês - 08": "Month number - 08",
+  "Nome do mês - Agosto": "Month name - August",
+  "Ano - 2026": "Year - 2026",
+  "Nome do computador": "Computer name",
+  "Usuário do Windows": "Windows user"
 }
